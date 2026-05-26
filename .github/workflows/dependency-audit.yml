@@ -1,0 +1,279 @@
+name: Dependency Security Audit
+
+on:
+  schedule:
+    # Run every Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+
+  # Run on pushes to main branch that change dependencies
+  push:
+    branches: [ main ]
+    paths:
+      - '**/requirements.txt'
+      - '**/pyproject.toml'
+      - '**/Pipfile'
+
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      audit_type:
+        description: 'Type of audit to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - security
+        - bundle
+
+jobs:
+  dependency-audit:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ['3.11']
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install audit dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pip-audit safety
+
+    - name: Create audit reports directory
+      run: mkdir -p audit-reports
+
+    - name: Run Security Audit
+      if: ${{ github.event.inputs.audit_type == 'security' || github.event.inputs.audit_type == 'all' || github.event.inputs.audit_type == '' }}
+      run: |
+        echo "🔒 Running comprehensive security audit..."
+        python comprehensive_security_audit.py
+
+    - name: Run Bundle Analysis
+      if: ${{ github.event.inputs.audit_type == 'bundle' || github.event.inputs.audit_type == 'all' || github.event.inputs.audit_type == '' }}
+      run: |
+        echo "📊 Running bundle size analysis..."
+        python bundle_analysis.py
+
+    - name: Run pip-audit (if available)
+      continue-on-error: true
+      run: |
+        echo "🔍 Running pip-audit scan..."
+        pip-audit --requirements ./backend/requirements.txt --format=json --output=audit-reports/backend-pip-audit.json || true
+        pip-audit --requirements ./frontend/requirements.txt --format=json --output=audit-reports/frontend-pip-audit.json || true
+
+    - name: Run safety check (if available)
+      continue-on-error: true
+      run: |
+        echo "🛡️ Running safety vulnerability check..."
+        pip install -r backend/requirements.txt
+        safety check --json --output audit-reports/backend-safety.json || true
+        pip install -r frontend/requirements.txt
+        safety check --json --output audit-reports/frontend-safety.json || true
+
+    - name: Analyze results and set outputs
+      id: audit-results
+      run: |
+        # Check if any critical vulnerabilities were found
+        CRITICAL_VULNS=0
+        HIGH_VULNS=0
+
+        if [ -f "security_audit_report.md" ]; then
+          CRITICAL_VULNS=$(grep -c "CRITICAL" security_audit_report.md || echo "0")
+          HIGH_VULNS=$(grep -c "HIGH" security_audit_report.md || echo "0")
+        fi
+
+        echo "critical_vulnerabilities=$CRITICAL_VULNS" >> $GITHUB_OUTPUT
+        echo "high_vulnerabilities=$HIGH_VULNS" >> $GITHUB_OUTPUT
+
+        # Bundle size analysis
+        BUNDLE_SIZE="0"
+        if [ -f "bundle_analysis_report.md" ]; then
+          BUNDLE_SIZE=$(grep -o "Combined Bundle Size.*MB" bundle_analysis_report.md | grep -o "[0-9.]*" | head -1 || echo "0")
+        fi
+        echo "bundle_size_mb=$BUNDLE_SIZE" >> $GITHUB_OUTPUT
+
+    - name: Upload audit reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: dependency-audit-reports
+        path: |
+          security_audit_report.md
+          bundle_analysis_report.md
+          DEPENDENCY_AUDIT_SUMMARY.md
+          audit-reports/
+        retention-days: 30
+
+    - name: Comment PR with results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const criticalVulns = '${{ steps.audit-results.outputs.critical_vulnerabilities }}';
+          const highVulns = '${{ steps.audit-results.outputs.high_vulnerabilities }}';
+          const bundleSize = '${{ steps.audit-results.outputs.bundle_size_mb }}';
+
+          let comment = `## 🔒 Dependency Audit Results\n\n`;
+          comment += `### Security Status\n`;
+          comment += `- **Critical Vulnerabilities**: ${criticalVulns}\n`;
+          comment += `- **High Risk Vulnerabilities**: ${highVulns}\n\n`;
+          comment += `### Bundle Analysis\n`;
+          comment += `- **Total Bundle Size**: ${bundleSize} MB\n`;
+
+          if (parseInt(criticalVulns) > 0) {
+            comment += `\n🚨 **CRITICAL**: This PR introduces critical security vulnerabilities!\n`;
+          } else if (parseInt(highVulns) > 0) {
+            comment += `\n⚠️ **WARNING**: This PR introduces high-risk security issues.\n`;
+          } else {
+            comment += `\n✅ **SAFE**: No critical security issues detected.\n`;
+          }
+
+          if (parseFloat(bundleSize) > 200) {
+            comment += `\n📊 **LARGE BUNDLE**: Bundle size is ${bundleSize}MB - consider optimization.\n`;
+          }
+
+          comment += `\n📄 **Full Reports**: Check the workflow artifacts for detailed analysis.`;
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+    - name: Create security issue if critical vulnerabilities found
+      if: steps.audit-results.outputs.critical_vulnerabilities > 0
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const criticalCount = '${{ steps.audit-results.outputs.critical_vulnerabilities }}';
+
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `🚨 CRITICAL: ${criticalCount} critical security vulnerabilities found`,
+            body: `## Security Alert
+
+            The automated dependency audit has discovered **${criticalCount} critical security vulnerabilities**.
+
+            ### Immediate Actions Required:
+            1. Review the security audit report (artifact: dependency-audit-reports)
+            2. Update vulnerable packages immediately
+            3. Test the application thoroughly after updates
+            4. Deploy security fixes as soon as possible
+
+            ### Audit Details:
+            - **Workflow**: [${context.workflow}](${context.payload.repository.html_url}/actions/runs/${context.runId})
+            - **Commit**: ${context.sha}
+            - **Branch**: ${context.ref}
+
+            **This issue was created automatically by the dependency audit workflow.**`,
+            labels: ['security', 'critical', 'dependencies', 'automated'],
+            assignees: [] // Add team members who should be notified
+          });
+
+    - name: Fail job if critical vulnerabilities found
+      if: steps.audit-results.outputs.critical_vulnerabilities > 0
+      run: |
+        echo "🚨 CRITICAL VULNERABILITIES FOUND: ${{ steps.audit-results.outputs.critical_vulnerabilities }}"
+        echo "This workflow is failing to prevent merge of critical security issues."
+        exit 1
+
+    - name: Summary
+      run: |
+        echo "## Dependency Audit Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Critical Vulnerabilities**: ${{ steps.audit-results.outputs.critical_vulnerabilities }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **High Vulnerabilities**: ${{ steps.audit-results.outputs.high_vulnerabilities }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Bundle Size**: ${{ steps.audit-results.outputs.bundle_size_mb }} MB" >> $GITHUB_STEP_SUMMARY
+
+        if [ "${{ steps.audit-results.outputs.critical_vulnerabilities }}" -gt "0" ]; then
+          echo "🚨 **Action Required**: Critical vulnerabilities need immediate attention" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ steps.audit-results.outputs.high_vulnerabilities }}" -gt "0" ]; then
+          echo "⚠️ **Attention**: High-risk vulnerabilities should be addressed soon" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "✅ **Status**: No critical security issues detected" >> $GITHUB_STEP_SUMMARY
+        fi
+
+  # Separate job for dependency updates bot (optional)
+  dependency-update-check:
+    runs-on: ubuntu-latest
+    needs: dependency-audit
+    if: always() && github.event_name == 'schedule'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Check for outdated dependencies
+      id: outdated-check
+      run: |
+        python -c "
+import subprocess
+import json
+
+# Check for outdated packages
+try:
+    result = subprocess.run(['pip', 'list', '--outdated', '--format=json'],
+                          capture_output=True, text=True)
+    outdated = json.loads(result.stdout)
+    count = len(outdated)
+    print(f'outdated_count={count}')
+
+    # Set output for GitHub Actions
+    with open('$GITHUB_OUTPUT', 'a') as f:
+        f.write(f'outdated_count={count}\n')
+        f.write(f'has_outdated={\"true\" if count > 0 else \"false\"}\n')
+except Exception as e:
+    print(f'Error checking outdated packages: {e}')
+    with open('$GITHUB_OUTPUT', 'a') as f:
+        f.write('outdated_count=0\n')
+        f.write('has_outdated=false\n')
+"
+
+    - name: Create dependency update issue
+      if: steps.outdated-check.outputs.has_outdated == 'true'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const outdatedCount = '${{ steps.outdated-check.outputs.outdated_count }}';
+
+          // Check if a similar issue already exists
+          const existingIssues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            labels: 'dependencies,automated,update-available',
+            state: 'open'
+          });
+
+          if (existingIssues.data.length === 0) {
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `📦 ${outdatedCount} dependency updates available`,
+              body: `## Dependency Updates Available
+
+              The weekly dependency check has found **${outdatedCount} packages** that have newer versions available.
+
+              ### Recommended Actions:
+              1. Review the packages and their changelogs
+              2. Test updates in a development environment
+              3. Create a PR with the updates
+              4. Run full test suite before merging
+
+              ### Automation Details:
+              - **Check Date**: ${new Date().toISOString().split('T')[0]}
+              - **Workflow**: [Dependency Audit](${context.payload.repository.html_url}/actions/runs/${context.runId})
+
+              **This issue was created automatically. Close it when updates are applied.**`,
+              labels: ['dependencies', 'enhancement', 'automated', 'update-available']
+            });
+          }

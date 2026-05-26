@@ -1,0 +1,101 @@
+# ── Entorn i secrets ─────────────────────────────────────────
+.env
+*.env
+.env.local
+.env.*.local
+
+# ── Python ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+*.so
+
+# ── Entorns virtuals ─────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.virtualenv/
+
+# ── Testing i cobertura ───────────────────────────────────────
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+nosetests.xml
+test-results/
+
+# ── Docker ───────────────────────────────────────────────────
+# Els volums de dades no van al repo
+docker/volumes/
+
+# ── Dades locals (no pujar dades reals ni sintètiques pesades)
+data/synthetic/*.json
+data/synthetic/*.csv
+data/policies/*.pdf
+# Excepció: els exemples de demo sí que pugen
+!data/synthetic/example_*.json
+!data/policies/example_*.pdf
+
+# ── ChromaDB (vector store local) ────────────────────────────
+chroma/
+chromadb/
+*.chroma
+
+# ── Models descarregats (HuggingFace cache) ──────────────────
+.cache/
+models/
+*.bin
+*.safetensors
+*.onnx
+
+# ── IDEs i editors ───────────────────────────────────────────
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Logs ─────────────────────────────────────────────────────
+*.log
+logs/
+uvicorn*.log
+
+# ── Jupyter (per si algú fa proves) ──────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Streamlit cache ──────────────────────────────────────────
+.streamlit/secrets.toml
+
+# ── Claude ───────────────────────────────────────────────────
+# Fitxers de context i knowledge documents de Claude
+# CONTEXT_*.md
+CLAUDE_*.md
+.claude/
+# Repo de comandes de Claude (submòdul o carpeta clonada)
+commands/
+claude-commands/
+
+# ── ZIP i arxius temporals ────────────────────────────────────
+*.zip
+*.tar.gz
+*.tmp

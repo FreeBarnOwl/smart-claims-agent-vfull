@@ -1,0 +1,97 @@
+name: smart-claims-agent
+
+services:
+  # ──────────────────────────────────────────
+  # Backend FastAPI + LangGraph orchestrator
+  # ──────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sca-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./data:/app/data
+    env_file: .env
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+    restart: unless-stopped
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+  # ──────────────────────────────────────────
+  # Frontend Streamlit
+  # ──────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sca-frontend
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./frontend:/app
+    env_file: .env
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────
+  # ChromaDB — vector store per al RAG
+  # ──────────────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:0.5.3
+    container_name: sca-chromadb
+    ports:
+      - "8080:8000"
+    volumes:
+      - chromadb_data:/chroma/chroma
+    environment:
+      CHROMA_SERVER_HOST: "0.0.0.0"
+      ANONYMIZED_TELEMETRY: "false"
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────
+  # MariaDB — log de decisions, expedients
+  # ──────────────────────────────────────────
+  mariadb:
+    image: mariadb:11.3
+    container_name: sca-mariadb
+    ports:
+      - "3306:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────
+  # Adminer — UI per inspeccionar la DB
+  # ──────────────────────────────────────────
+  adminer:
+    image: adminer:4.8.1
+    container_name: sca-adminer
+    ports:
+      - "8082:8080"
+    depends_on:
+      - mariadb
+    restart: unless-stopped
+
+volumes:
+  chromadb_data:
+    name: sca_chromadb_data
+  mariadb_data:
+    name: sca_mariadb_data
