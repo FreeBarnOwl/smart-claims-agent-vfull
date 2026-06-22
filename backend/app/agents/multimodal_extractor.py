@@ -45,13 +45,13 @@ Reglas:
 
 def _build_llm() -> ChatAnthropic:
     return ChatAnthropic(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=2048,
         temperature=0,
     ).bind_tools([extract_multimodal, log_decision])
 
 
-def multimodal_extractor_node(state: "ClaimState") -> dict:
+def multimodal_extractor_node(state: dict) -> dict:
     """
     Nodo LangGraph del Agente C.
 

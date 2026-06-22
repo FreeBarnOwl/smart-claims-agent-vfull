@@ -50,13 +50,13 @@ Reglas:
 
 def _build_llm() -> ChatAnthropic:
     return ChatAnthropic(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=2048,
         temperature=0,
     ).bind_tools([approve_payment, send_rejection, log_decision])
 
 
-def claim_resolver_node(state: "ClaimState") -> dict:
+def claim_resolver_node(state: dict) -> dict:
     """
     Nodo LangGraph del Agente E.
 

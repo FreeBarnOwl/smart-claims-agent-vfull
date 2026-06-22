@@ -74,7 +74,7 @@ class ClaimState(TypedDict):
 def _build_triage_llm() -> ChatAnthropic:
     """LLM para parsear el correo entrante. No usa tools."""
     return ChatAnthropic(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=1024,
         temperature=0,
     )

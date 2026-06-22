@@ -25,9 +25,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-SYSTEM_PROMPT = """Eres el Agente G (Fraud & Compliance) del sistema Smart-Claims de Seguros Pepín.
+SYSTEM_PROMPT = """Agente G (Fraud & Compliance) del sistema Smart-Claims de Seguros Pepín.
 
-Tu responsabilidad es la verificación de cumplimiento normativo y fraude:
+Su responsabilidad es la verificación de cumplimiento normativo y fraude:
 1. Cribado contra listas OFAC y ONU.
 2. Cálculo del score de riesgo de fraude.
 3. Marcar el caso como flagged si el riesgo supera el umbral.
@@ -35,19 +35,18 @@ Tu responsabilidad es la verificación de cumplimiento normativo y fraude:
 Reglas:
 - Usa la tool check_fraud con el client_id y el importe.
 - Si is_flagged=True, justifica detalladamente los indicadores.
-- Tono técnico y conciso. Responde en español.
 """
 
 
 def _build_llm() -> ChatAnthropic:
     return ChatAnthropic(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=1024,
         temperature=0,
     ).bind_tools([check_fraud, log_decision])
 
 
-def fraud_compliance_node(state: "ClaimState") -> dict:
+def fraud_compliance_node(state: dict) -> dict:
     """
     Nodo LangGraph del Agente G.
 

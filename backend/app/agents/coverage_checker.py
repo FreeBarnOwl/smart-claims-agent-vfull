@@ -44,13 +44,13 @@ Reglas:
 
 def _build_llm() -> ChatAnthropic:
     return ChatAnthropic(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=1024,
         temperature=0,
     ).bind_tools([check_policy, log_decision])
 
 
-def coverage_checker_node(state: "ClaimState") -> dict:
+def coverage_checker_node(state: dict) -> dict:
     """
     Nodo LangGraph del Agente D.
 

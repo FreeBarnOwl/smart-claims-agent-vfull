@@ -201,23 +201,44 @@ def check_fraud(claim_id: str, client_id: str, amount: float) -> dict:
 @tool
 def log_decision(claim_id: str, agent: str, reasoning: str, action: str) -> dict:
     """
-    Registra la decisió d'un agent a la base de dades (MariaDB).
+    Registra la decisión de un agente en MariaDB.
 
     Args:
-        claim_id: ID de l'expedient.
-        agent: Identificador de l'agent (ex: 'agent_e').
-        reasoning: Raonament CoT de la decisió.
-        action: Acció executada.
+        claim_id:  ID del expediente.
+        agent:     Identificador del agente (ej: 'agent_b_document_validator').
+        reasoning: Razonamiento CoT de la decisión.
+        action:    Acción ejecutada.
 
     Returns:
         log_id, stored_at.
     """
-    logger.info("LOG — Agent %s | Expedient %s | Acció: %s", agent, claim_id, action)
+    logger.info("LOG — Agent %s | Expediente %s | Acción: %s",
+                agent, claim_id, action)
+
+    log_id = -1
+    try:
+        # Import diferido para evitar ciclos
+        from app.db.session import SyncSession
+        from app.db.models  import AgentDecision
+
+        with SyncSession() as session:
+            decision = AgentDecision(
+                claim_id  = claim_id,
+                agent     = agent[:32],   # respetar VARCHAR(32)
+                action    = action[:128], # respetar VARCHAR(128)
+                reasoning = reasoning or "(sin razonamiento)",
+            )
+            session.add(decision)
+            session.commit()
+            log_id = decision.id
+    except Exception as e:
+        logger.error("Failed to persist decision: %s", e)
+
     return {
-        "log_id": f"LOG-{claim_id}-{agent}",
-        "claim_id": claim_id,
-        "agent": agent,
-        "action": action,
+        "log_id":    log_id,
+        "claim_id":  claim_id,
+        "agent":     agent,
+        "action":    action,
         "stored_at": datetime.utcnow().isoformat(),
     }
 

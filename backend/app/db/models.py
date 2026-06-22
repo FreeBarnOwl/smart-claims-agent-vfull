@@ -25,7 +25,13 @@ class Claim(Base):
     claim_type: Mapped[str] = mapped_column(String(64), nullable=False)
     channel: Mapped[str] = mapped_column(String(16), default="email")
     status: Mapped[ClaimStatus] = mapped_column(
-        Enum(ClaimStatus), default=ClaimStatus.OPEN
+        Enum(
+            ClaimStatus,
+            values_callable=lambda x: [e.value for e in x],
+            native_enum=True,
+            name="claimstatus",
+        ),
+        default=ClaimStatus.OPEN,
     )
     amount_requested: Mapped[float | None] = mapped_column(Float, nullable=True)
     amount_approved: Mapped[float | None] = mapped_column(Float, nullable=True)
