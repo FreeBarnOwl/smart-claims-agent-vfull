@@ -10,7 +10,7 @@ async def agents_status():
     # TODO: estat real dels agents — Entrega 2 S3
     return {
         "agents": [
-            {"id": a, "status": "stub" if a != "agent_a" else "implemented"}
+            {"id": a, "status": "implemented"}
             for a in AGENTS
         ]
     }
