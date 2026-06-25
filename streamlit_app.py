@@ -432,37 +432,45 @@ elif view == "nueva":
     cols = st.columns(5)
     for i, sc in enumerate(DEMO_SCENARIOS):
         with cols[i]:
-            with st.container(border=True):
+            # Altura fija → todas las tarjetas del mismo tamaño; el botón va
+            # debajo de la caja, de modo que los 5 botones quedan alineados.
+            with st.container(border=True, height=205):
                 st.markdown(f"**{sc['label']}**")
                 st.caption(sc["desc"])
-                if st.button("Procesar", key=f"sc_{i}", use_container_width=True):
-                    process_and_store("CLIENT-DEMO", "cliente@segurospepin.com",
-                                      sc["claim_type"], sc["amount"], sc["docs"],
-                                      client_name=sc.get("client_name"))
+            if st.button("Procesar", key=f"sc_{i}", use_container_width=True):
+                process_and_store("CLIENT-DEMO", "cliente@segurospepin.com",
+                                  sc["claim_type"], sc["amount"], sc["docs"],
+                                  client_name=sc.get("client_name"))
 
     st.markdown('<div class="sca-section">O crea una reclamación personalizada</div>',
                 unsafe_allow_html=True)
     with st.form("claim_form"):
         a, b = st.columns(2)
-        client_name = a.text_input("Nombre del asegurado", value="Juan García",
+        client_name = a.text_input("Nombre del asegurado", value="",
+                                   placeholder="p. ej. Juan García",
                                    help="Se compara contra la lista OFAC/ONU en el cribado antifraude.")
-        client_id = b.text_input("ID Cliente", value="CLIENT-A")
-        client_email = a.text_input("Email del cliente", value="cliente@segurospepin.com")
+        client_id = b.text_input("ID Cliente", value="", placeholder="p. ej. CLIENT-A")
+        client_email = a.text_input("Email del cliente", value="", placeholder="cliente@ejemplo.com")
         claim_type = b.selectbox("Tipo de siniestro", options=list(CLAIM_TYPES.keys()),
-                                 format_func=lambda k: CLAIM_TYPES[k])
+                                 format_func=lambda k: CLAIM_TYPES[k],
+                                 index=None, placeholder="Selecciona el tipo…")
         amount = a.number_input("Importe reclamado (€)", min_value=0.0, max_value=100000.0,
-                                value=2500.0, step=100.0)
-        docs_avail = REQUIRED_DOCS_BY_TYPE.get(claim_type, [])
-        documents = b.multiselect("Documentos aportados (tipo)", options=docs_avail, default=docs_avail,
-                                  help="Deselecciona alguno para simular documentación incompleta.")
+                                value=None, step=100.0, placeholder="0")
+        all_docs = sorted({d for docs in REQUIRED_DOCS_BY_TYPE.values() for d in docs})
+        documents = b.multiselect("Documentos aportados (tipo)", options=all_docs, default=[],
+                                  help="Selecciona los documentos que aporta el cliente para su tipo de siniestro.")
         uploaded = st.file_uploader(
             "Sube los documentos reales (factura, foto de daños, acta...) — el Agente C los analizará con Claude Vision",
             type=["png", "jpg", "jpeg", "webp", "pdf"], accept_multiple_files=True,
         )
         submitted = st.form_submit_button("Procesar reclamación", use_container_width=True)
     if submitted:
-        process_and_store(client_id, client_email, claim_type, amount, documents,
-                          client_name=client_name, uploaded=read_uploads(uploaded))
+        if not claim_type or amount is None:
+            st.warning("Indica al menos el tipo de siniestro y el importe reclamado.")
+        else:
+            process_and_store(client_id or "CLIENT-A", client_email or "cliente@segurospepin.com",
+                              claim_type, amount, documents,
+                              client_name=client_name or None, uploaded=read_uploads(uploaded))
 
     if st.session_state.get("last_result"):
         st.divider()
