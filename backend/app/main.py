@@ -4,6 +4,11 @@ Punto de entrada de la API FastAPI del sistema Smart-Claims Agent.
 import logging
 from contextlib import asynccontextmanager
 
+from dotenv import find_dotenv, load_dotenv
+
+# Carga .env en ejecucion local (con Docker, env_file ya inyecta las variables).
+load_dotenv(find_dotenv())
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

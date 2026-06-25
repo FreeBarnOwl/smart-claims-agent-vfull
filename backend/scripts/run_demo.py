@@ -16,6 +16,11 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from dotenv import find_dotenv, load_dotenv         # noqa: E402
+
+# Carga .env para que la CLI use la clave de Anthropic en ejecucion local.
+load_dotenv(find_dotenv())
+
 from app.agents.orchestrator import process_claim  # noqa: E402
 from app.db.session import engine                  # noqa: E402
 
