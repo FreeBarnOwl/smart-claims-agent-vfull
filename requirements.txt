@@ -1,0 +1,21 @@
+# requirements.txt — para el despliegue en Streamlit Community Cloud.
+# (El backend Docker usa backend/requirements.txt; este fichero es solo
+#  para la app autonoma streamlit_app.py, que ejecuta los agentes in-process.)
+# Versiones fijadas a las verificadas en desarrollo (42 tests en verde + clave
+# Anthropic validada con claude-sonnet-4-6).
+
+streamlit==1.57.0
+pandas==2.2.3
+
+# Agentes (LangGraph + LangChain + Anthropic)
+langgraph==1.2.1
+langchain-anthropic==1.4.3
+anthropic==0.104.1
+
+# Persistencia (best-effort; en Streamlit Cloud no hay MariaDB y se omite)
+SQLAlchemy[asyncio]==2.0.31
+aiomysql==0.3.2
+PyMySQL==1.1.1
+
+# Configuracion
+python-dotenv==1.2.2

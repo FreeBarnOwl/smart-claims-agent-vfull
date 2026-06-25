@@ -105,3 +105,33 @@ Con el motor antifraude, la suite pasa de 25 a **42 tests** (6 ficheros), todos 
 La rama `solucion_final` (tag `v1.0.0-entrega2`) se fusiona a `main` por *fast-forward*; `main` queda como fuente de verdad. Se cierra el PR #1 (rama `feature/prototipo-e2e-entrega2`), ya incorporado en la consolidación.
 
 > **PENDIENTE para el equipo (importante):** el capítulo §4.4–4.6 (evaluación, 96,7 %) y las menciones al *"mock aleatorio de fraude / seed(7)"* (Hitos 4.3–4.4) se midieron **antes** del motor antifraude del Hito 6.1. Como el Agente G ya no usa un score aleatorio sino los 4 detectores deterministas, conviene **re-ejecutar `scripts/evaluate_dataset.py`** y actualizar §4.4–4.6 con los resultados reales del nuevo motor.
+
+## Fase 7 — Clave de IA y despliegue en Streamlit Cloud (junio 2026)
+
+**Hito 7.1 — Configuración de la clave de Anthropic.**
+Se añade soporte de `.env` con `load_dotenv()` en los puntos de ejecución (API `main.py` y CLI
+`run_demo.py`), **no en los tests** (que siguen corriendo en *fallback*, gratis y deterministas).
+La clave real se guarda en `.env` (ignorado por git) y, en el deploy, en los *Secrets* de
+Streamlit. Verificado: la clave es válida y el Chain of Thought pasa a generarlo Claude
+(`claude-sonnet-4-6`) en lugar del *fallback*.
+
+**Hito 7.2 — Hallazgo: deriva de versiones.**
+El entorno de desarrollo real corre versiones mucho más nuevas que las fijadas en
+`backend/requirements.txt` (langgraph 1.2.1 vs 0.1.14, langchain-anthropic 1.4.3 vs 0.1.15,
+anthropic 0.104.1 vs 0.29.0). Los 42 tests pasan con las nuevas. Para el deploy se fijan las
+**versiones que funcionan** (las nuevas) en el `requirements.txt` de la raíz. *(Recomendado:
+actualizar también `backend/requirements.txt` para evitar sorpresas en el build Docker.)*
+
+**Hito 7.3 — Dashboard autónomo para Streamlit Cloud.**
+Se crea `streamlit_app.py` (raíz): una app **autónoma** que invoca `process_claim`
+**in-process**, sin backend FastAPI ni MariaDB (Streamlit Cloud solo ejecuta un proceso).
+La persistencia es best-effort (sin BD, el historial vive en sesión). Estética **Salesforce
+Lightning** con identidad de marca **Seguros Pepín** (logo real, azul corporativo, acento
+naranja); el razonamiento de Claude se renderiza como markdown en una *timeline* de agentes.
+Se añade `requirements.txt` (raíz) y `.streamlit/secrets.toml.example`; el `.gitignore` ya
+protege `.env` y `.streamlit/secrets.toml`.
+
+**Hito 7.4 — Verificación.**
+La app arranca sin errores en modo headless y el camino in-process produce la decisión
+correcta con CoT de Claude (caso de prueba: `danys_propis`, 2.500 € → `resolved` / `PAGO`).
+Guía de despliegue paso a paso en `docs/DEPLOY-STREAMLIT.md`.
