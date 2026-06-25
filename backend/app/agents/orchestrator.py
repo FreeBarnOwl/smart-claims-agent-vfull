@@ -118,16 +118,7 @@ def supervisor_router(state: dict) -> str:
         logger.info("[Supervisor] %s → END (%s)", claim_id, reason_term)
         return END
 
-    # 2-3. Cribado de fraude (filtro de entrada)
-    if state.get("fraud_result") is None:
-        logger.info("[Supervisor] %s → fraud_compliance", claim_id)
-        return "fraud_compliance"
-
-    if state["fraud_result"].get("is_flagged"):
-        logger.info("[Supervisor] %s → END (bloqueado por fraude/OFAC)", claim_id)
-        return END
-
-    # 4-5. Validacion documental
+    # 2. Recepción: validación documental
     if state.get("validation_result") is None:
         logger.info("[Supervisor] %s → document_validator", claim_id)
         return "document_validator"
@@ -136,22 +127,33 @@ def supervisor_router(state: dict) -> str:
         logger.info("[Supervisor] %s → END (documentacion incompleta)", claim_id)
         return END
 
-    # 6. Extraccion multimodal
+    # 3. Extracción multimodal (necesita documentación válida)
     if state.get("extraction_result") is None:
         logger.info("[Supervisor] %s → multimodal_extractor", claim_id)
         return "multimodal_extractor"
 
-    # 7. Verificacion de cobertura
+    # 4. Cribado de fraude/cumplimiento — gate previo a la resolución.
+    #    Se ejecuta tras la recepción documental para que los 4 detectores
+    #    (incluida la coherencia documental) dispongan de los datos extraídos.
+    if state.get("fraud_result") is None:
+        logger.info("[Supervisor] %s → fraud_compliance", claim_id)
+        return "fraud_compliance"
+
+    if state["fraud_result"].get("is_flagged"):
+        logger.info("[Supervisor] %s → END (bloqueado por fraude/OFAC)", claim_id)
+        return END
+
+    # 5. Verificacion de cobertura
     if state.get("coverage_result") is None:
         logger.info("[Supervisor] %s → coverage_checker", claim_id)
         return "coverage_checker"
 
-    # 8. Resolucion final
+    # 6. Resolucion final
     if state.get("resolution") is None:
         logger.info("[Supervisor] %s → claim_resolver", claim_id)
         return "claim_resolver"
 
-    # 9. Nada pendiente
+    # 7. Nada pendiente
     logger.info("[Supervisor] %s → END (flujo completo)", claim_id)
     return END
 

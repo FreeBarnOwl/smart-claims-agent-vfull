@@ -28,6 +28,24 @@ from app.tools.fraud_tools import (
 logger = logging.getLogger(__name__)
 
 
+def _flatten_extraction(extraction: dict) -> dict:
+    """Aplana extraction_result.by_document a las claves que espera el detector
+    de coherencia documental (incident_date, factura.date). Compatible con la
+    extracción mock (con subclave 'extracted') y con la real de Claude Vision."""
+    flat: dict = {}
+    by_doc = (extraction or {}).get("by_document") or {}
+    for key, d in by_doc.items():
+        if not isinstance(d, dict):
+            continue
+        inner = d.get("extracted") if isinstance(d.get("extracted"), dict) else d
+        dtype = str(d.get("doc_type") or key).lower()
+        if "acta" in dtype and "incident_date" not in flat:
+            flat["incident_date"] = inner.get("incident_date") or d.get("date")
+        if "factura" in dtype and "factura" not in flat:
+            flat["factura"] = {"date": inner.get("date") or d.get("date")}
+    return flat
+
+
 # Mock de historial de reclamaciones para detector de duplicados.
 # En produccion seria una consulta async a MariaDB sobre la tabla `claims`.
 _MOCK_CLAIM_HISTORY: list[dict] = [
@@ -61,7 +79,7 @@ async def fraud_compliance_node(state: dict) -> dict:
     ofac      = check_ofac_sanctions(client_name)
     amount_ck = check_amount_anomaly(claim_type, amount)
     duplicate = check_duplicate_claims(client_id, claim_type, _MOCK_CLAIM_HISTORY)
-    doc_check = check_document_coherence(extracted)
+    doc_check = check_document_coherence(_flatten_extraction(extracted))
 
     risk_score, verdict = compute_risk_score(ofac, amount_ck, duplicate, doc_check)
     is_flagged = verdict in ("HIGH_RISK", "BLOCKED")

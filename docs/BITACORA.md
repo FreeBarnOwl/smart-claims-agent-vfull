@@ -188,3 +188,28 @@ tipo. Mantiene el deploy ligero (chromadb + onnxruntime, sin torch).
 calcula la cobertura (`danys_propis` 3.200 € → neto 2.900 €, cita SP-PCS-009 §3.2), y fallback al
 mock cuando el RAG está desactivado. La UI muestra la sección de póliza recuperada por RAG.
 **Esto cierra la mayor brecha del proyecto**: el "RAG" ya no es ficticio.
+
+## Fase 10 — Activar el 4º detector del Agente G (coherencia documental) (junio 2026)
+
+**Hito 10.1 — Diagnóstico.**
+El detector de **coherencia documental** del Agente G estaba **muerto** por dos razones: (1) el
+orden del flujo (G se ejecutaba antes que C → sin datos extraídos) y (2) la forma de los datos
+(`check_document_coherence` esperaba claves planas, pero `extraction_result` las anida bajo
+`by_document`). De los "4 detectores", solo 3 estaban activos.
+
+**Hito 10.2 — Arreglo (sin romper el flujo).**
+- **Reordenado el flujo** a `A → B → C → G → D → E` (router del supervisor). El Agente G pasa de
+  "filtro de entrada" a **gate de cumplimiento tras la recepción documental, antes de la
+  resolución** — sigue bloqueando antes de cualquier pago. Solo se reordenó el router; las aristas
+  del grafo no cambian → **sin riesgo de bucle**.
+- **Aplanada la extracción** (`_flatten_extraction`) para que `check_document_coherence` reciba las
+  fechas (compatible con extracción mock y con la real de Claude Vision).
+- **Verificación de no-regresión:** la secuencia de `random` se preserva (solo C y E consumen
+  random, en el mismo orden relativo) y con datos coherentes el detector da `False` → los tests
+  deterministas no cambian. 27 tests sensibles al reorden + 15 de fraude + 3 RAG + 2 nuevos = **47
+  verde**.
+
+**Hito 10.3 — Verificación del detector.**
+2 tests nuevos (`test_fraud_coherence.py`): con factura previa al siniestro marca incoherencia
+(`factura_previa_al_siniestro`); con fechas coherentes no marca. **Los 4 detectores del Agente G
+están ahora activos.**
