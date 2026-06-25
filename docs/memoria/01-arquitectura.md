@@ -2,64 +2,21 @@
 
 ## 1. Visión general del sistema
 
-**Smart-Claims Agent** es un sistema agéntico orientado a automatizar la gestión de reclamaciones de siniestros de **Seguros Pepín, S.A.**, desarrollado como Trabajo Fin de Máster del Máster en Machine Learning e Inteligencia Artificial de OBS Business School. El objetivo funcional del sistema es recibir un expediente de siniestro, razonar de forma estructurada sobre él y resolverlo de manera autónoma —pago, rechazo, solicitud de información o derivación a revisión humana— dejando constancia auditable de cada decisión tomada por la cadena de agentes.
+**Smart-Claims Agent** es un sistema agéntico orientado a automatizar el ciclo completo de gestión de una reclamación de siniestro de **Seguros Pepín, S.A.**, aseguradora real con sede en la República Dominicana, desarrollado como Trabajo Fin de Máster del Máster en Machine Learning e Inteligencia Artificial de OBS Business School. El objetivo funcional del sistema es recibir un expediente de siniestro, razonar de forma estructurada sobre él y resolverlo de manera autónoma —pago automático, rechazo, solicitud de información complementaria o derivación a revisión humana— dejando constancia auditable de cada decisión tomada por la cadena de agentes.
 
-El alcance de esta entrega es deliberadamente el de un **MVP (Producto Mínimo Viable) / prototipo demostrable**, no el de un sistema en producción. Esta decisión condiciona toda la arquitectura: prima la claridad, la reproducibilidad y la capacidad de demostración sobre la escalabilidad o la tolerancia a fallos de grado industrial. El sistema está concebido para poder ejecutarse de extremo a extremo y exhibir su razonamiento ante un tribunal académico.
+El alcance de esta entrega es deliberadamente el de un **MVP (Producto Mínimo Viable) demostrable**, no el de un sistema en producción. Esta decisión condiciona toda la arquitectura: prima la claridad, la reproducibilidad y la capacidad de demostración sobre la escalabilidad o la tolerancia a fallos de grado industrial. El sistema está concebido para ejecutarse de extremo a extremo y exhibir su razonamiento ante un tribunal académico.
 
-Una **restricción clave y definitiva** atraviesa todo el diseño: el proyecto **no dispone de acceso a las APIs de los sistemas reales de Seguros Pepín** (gestor documental, sistema de pólizas, motor de pagos, listas de sanciones, etc.). En consecuencia, **todas las integraciones externas están simuladas (*mock*) de forma permanente**, no como un estado transitorio en espera de conexión. Cada herramienta del sistema documenta, mediante una nota explícita, cuál sería la integración real que la sustituiría en un despliegue productivo (véase la tabla *Mock → Integración real* en la sección 9). Esta restricción no es un defecto del prototipo, sino una condición de contorno asumida desde el inicio, y la arquitectura se ha diseñado para que la sustitución futura de los *mocks* por integraciones reales sea localizada y de bajo impacto.
+Por su naturaleza, el sistema trata datos personales de asegurados (nombre, identificador de cliente, correo electrónico, documentación del siniestro). El marco normativo de referencia no es el RGPD europeo, sino la **Ley 172-13 de Protección de Datos de Carácter Personal de la República Dominicana**, que rige las garantías de tratamiento, conservación y minimización aplicables a Seguros Pepín. Esta condición se refleja en el diseño de la capa de datos (registro auditable, minimización de los datos persistidos) y en las salvaguardas de cumplimiento del Agente G.
 
-En resumen, el sistema persigue tres propiedades rectoras que se repetirán a lo largo del capítulo: **reproducibilidad** (mismo expediente, misma traza), **trazabilidad/auditabilidad** (cada decisión queda registrada y justificada) y **resiliencia de la demostración** (el flujo funciona aunque falten componentes opcionales como la base de datos o la clave de un LLM externo).
+Una **restricción clave y definitiva** atraviesa todo el diseño: el proyecto **no dispone de acceso a las APIs de los sistemas reales de Seguros Pepín** (gestor documental, sistema de pólizas, motor de pagos, listas oficiales de sanciones, canales de notificación). En consecuencia, **todas las integraciones con sistemas externos de la aseguradora están simuladas (*mock* / datos sintéticos) de forma permanente**, no como un estado transitorio a la espera de conexión. Esta restricción no es un defecto del prototipo, sino una condición de contorno asumida desde el inicio, y la arquitectura se ha diseñado para que la sustitución futura de los *mocks* por integraciones reales sea localizada y de bajo impacto.
 
-## 2. Las cinco capas funcionales y las dos transversales
+Conviene precisar un matiz importante que recorre todo el capítulo: **el LLM utilizado (Claude) no es un sistema de Seguros Pepín**, sino una capacidad propia del proyecto contratada directamente a su proveedor. Por ello, mientras las integraciones corporativas permanecen simuladas, las **capacidades de inteligencia artificial son reales**: la extracción multimodal con visión por computador, la recuperación aumentada (RAG) sobre el corpus de pólizas y el razonamiento en lenguaje natural se ejecutan de verdad contra modelos y motores reales. La frontera entre "lo simulado" y "lo real" se traza, por tanto, no entre IA y reglas, sino entre *integraciones con terceros sin acceso* (mock) y *capacidades de IA bajo control del proyecto* (reales). La sección 7 formaliza esta distinción.
 
-La arquitectura se organiza en **cinco capas funcionales** apiladas, atravesadas por **dos capas transversales**. La separación por capas facilita el razonamiento sobre responsabilidades y aísla la zona afectada por la restricción de *mocks* (capa 5).
+En resumen, el sistema persigue tres propiedades rectoras que se repetirán a lo largo del capítulo: **reproducibilidad** (mismo expediente, misma traza), **trazabilidad / auditabilidad** (cada decisión queda registrada y justificada) y **resiliencia de la demostración** (el flujo funciona aunque falten componentes opcionales como la base de datos, la clave del LLM o el servicio vectorial).
 
-1. **Canales de entrada.** Punto de acceso de los expedientes al sistema. Contempla email, portal web, WhatsApp (simulado) y, como interfaz efectiva del MVP, una **API REST**. Su responsabilidad es normalizar la reclamación entrante a un formato común de expediente.
-2. **Orquestación.** Núcleo de coordinación. Contiene el **Agente A (orquestador)**, el grafo de estado de **LangGraph** y la lógica de **Human-in-the-Loop (HITL)**. Aplica el patrón **Supervisor (Hub-and-Spoke)**: el supervisor es el único componente que decide qué agente actúa en cada momento. Los agentes especializados son nodos puros que hacen su trabajo y devuelven el control al supervisor.
-3. **Agentes especializados.** Los trabajadores que ejecutan las tareas concretas: validación documental (B), extracción multimodal (C), verificación de cobertura (D), resolución (E) y control de fraude/cumplimiento (G).
-4. **Datos y conocimiento.** Persistencia y conocimiento corporativo. Incluye **MariaDB** para el registro de expedientes, decisiones y HITL, y **ChromaDB** como base vectorial para la recuperación aumentada (RAG) sobre pólizas, prevista como fase posterior.
-5. **Integración simulada.** Conjunto de *mocks* que representan los sistemas externos de Seguros Pepín (documentos, pólizas, pagos, listas OFAC/LA-FT). Es la capa donde se concentra la restricción de no disponer de APIs reales.
+## 2. El patrón Supervisor (Hub-and-Spoke) y su justificación
 
-Las dos capas transversales atraviesan todas las anteriores:
-
-- **T1 — Seguridad.** Anonimización de datos personales, control de acceso y auditoría de las operaciones.
-- **T2 — Observabilidad.** Captura de las trazas de razonamiento (Chain of Thought) y de métricas del flujo, base de la trazabilidad exigida.
-
-El siguiente diagrama ASCII resume la disposición de capas:
-
-```
-+=====================================================================+
-|                     T1 · SEGURIDAD (anonimización,                  |
-|                  control de acceso, auditoría)                      |
-+---------------------------------------------------------------------+
-|                                                                     |
-|   CAPA 1 · CANALES DE ENTRADA                                       |
-|   [Email] [Portal web] [WhatsApp (sim.)] [API REST]                 |
-|                              |                                      |
-|                              v                                      |
-|   CAPA 2 · ORQUESTACIÓN                                             |
-|   [ Agente A · Supervisor ]──[ LangGraph (grafo de estado) ]──[HITL]|
-|                              |                                      |
-|                              v                                      |
-|   CAPA 3 · AGENTES ESPECIALIZADOS                                   |
-|   [G Fraude] [B Docs] [C Extracción VLM] [D Cobertura] [E Resol.]   |
-|                              |                                      |
-|                              v                                      |
-|   CAPA 4 · DATOS Y CONOCIMIENTO                                     |
-|   [ MariaDB: claims / decisions / HITL ]  [ ChromaDB: RAG pólizas ] |
-|                              |                                      |
-|                              v                                      |
-|   CAPA 5 · INTEGRACIÓN SIMULADA (mock APIs)                         |
-|   [Docs] [Pólizas] [Pagos] [OFAC/LA-FT]  → integración real futura  |
-|                                                                     |
-+---------------------------------------------------------------------+
-|                  T2 · OBSERVABILIDAD (trazas CoT, métricas)         |
-+=====================================================================+
-```
-
-## 3. El patrón Supervisor (Hub-and-Spoke) y su justificación
-
-El sistema implementa un **patrón Supervisor**, también conocido como **Hub-and-Spoke**, sobre **LangGraph**, materializado como un **grafo de estado** dirigido. El **Agente A actúa como supervisor central (hub)** y los agentes especializados (B, C, D, E, G) como radios (*spokes*). La propiedad clave del patrón es que **el supervisor es el único componente que decide el enrutamiento**: cada agente especializado hace su trabajo, escribe su contribución en el estado compartido y devuelve el control al supervisor, que vuelve a evaluar el estado y decide el siguiente.
+El sistema implementa un **patrón Supervisor**, también conocido como **Hub-and-Spoke**, sobre **LangGraph** (LangChain AI, 2024), materializado como un **grafo de estado** dirigido. El **Agente A actúa como supervisor central (hub)** y los agentes especializados (B, C, D, E, G) como radios (*spokes*). La propiedad clave del patrón es que **el supervisor es el único componente que decide el enrutamiento**: cada agente especializado realiza su tarea, escribe su contribución en el estado compartido y devuelve el control al supervisor, que vuelve a evaluar el estado y decide cuál es el siguiente nodo. Los agentes especialistas **no se llaman entre sí** en ningún caso.
 
 Este patrón es una concreción de los sistemas multiagente basados en LLM descritos en la literatura reciente sobre agentes autónomos (Wang et al., 2024), donde la descomposición de una tarea compleja en subtareas asignadas a componentes especializados mejora la fiabilidad frente a un agente monolítico. LangGraph documenta explícitamente esta topología como uno de los patrones canónicos para sistemas multiagente (LangChain AI, 2024).
 
@@ -69,154 +26,154 @@ La alternativa natural habría sido un **bucle ReAct totalmente libre** (Yao et 
 - **Control del coste de tokens.** Un agente que decide libremente cuántos pasos dar y qué herramientas usar tiene un consumo de tokens difícil de acotar; un grafo con nodos predefinidos hace ese coste predecible.
 - **Trazabilidad y auditoría deterministas.** En un dominio asegurador, cada decisión debe poder explicarse y auditarse. Un grafo de estado con transiciones explícitas garantiza que la secuencia de decisiones sea determinista y reconstruible.
 
-Otra alternativa considerada y descartada fue una **topología en cadena (chain)**, en la que cada agente decide explícitamente cuál es el siguiente. Frente al Supervisor, la cadena distribuye la lógica de flujo entre todos los agentes, lo que dificulta su evolución (añadir un nuevo agente obliga a modificar los vecinos) y dispersa la auditoría. El Supervisor concentra la lógica de enrutamiento en un único punto, lo que la hace defendible en una memoria académica y verificable mediante un único test del router.
+Por estas razones se ha optado por **fijar la topología del flujo en un grafo con supervisor central** en lugar de delegar la planificación en el propio modelo. El razonamiento del estilo ReAct no se descarta del todo: se conserva en el nivel de cada agente como **Chain of Thought** registrado, pero la *orquestación* —qué agente actúa después de cuál— es responsabilidad determinista del supervisor, no de una decisión libre del LLM. Se combina así la transparencia del razonamiento agéntico (Yao et al., 2022) con el control de un flujo de trabajo gobernado.
 
-Por estas razones se ha optado por **fijar la topología del flujo en un grafo con supervisor central** en lugar de delegar la planificación en el propio modelo o en los agentes especializados. El razonamiento del estilo ReAct no se descarta: se conserva en el nivel de cada agente como **Chain of Thought** registrado, pero la *orquestación* —qué agente actúa después de cuál— es responsabilidad determinista del supervisor, no de una decisión libre del LLM. Se combina así la transparencia del razonamiento agéntico con el control de un flujo de trabajo gobernado.
+El núcleo del supervisor es una función Python pura y determinista, `supervisor_router`, que se invoca como arista condicional (*conditional edge*) del grafo. Decide el siguiente nodo a partir exclusivamente del estado acumulado, evaluando en orden si cada resultado parcial está disponible. Toda la lógica del flujo está concentrada en este único punto, lo que la hace especialmente legible, testeable (basta un test del router) y modificable.
 
-El núcleo del supervisor es una función Python pura y determinista que se invoca como *edge condicional* del grafo:
+El siguiente diagrama resume la topología Hub-and-Spoke:
 
-```python
-def supervisor_router(state: dict) -> str:
-    if state.get("terminate"):
-        return END
-    if state.get("fraud_result") is None:
-        return "fraud_compliance"
-    if state["fraud_result"].get("is_flagged"):
-        return END
-    if state.get("validation_result") is None:
-        return "document_validator"
-    if not state["validation_result"].get("is_valid"):
-        return END
-    if state.get("extraction_result") is None:
-        return "multimodal_extractor"
-    if state.get("coverage_result") is None:
-        return "coverage_checker"
-    if state.get("resolution") is None:
-        return "claim_resolver"
-    return END
+```
+                        ┌───────────────────────────┐
+                        │   A · SUPERVISOR (hub)     │
+                        │  supervisor_router(state)  │
+                        └─────────────┬─────────────┘
+            ┌──────────────┬──────────┼──────────┬──────────────┐
+            │              │          │          │              │
+            v              v          v          v              v
+      ┌───────────┐  ┌──────────┐ ┌────────┐ ┌──────────┐ ┌───────────┐
+      │ B · Docs  │  │ C · Extr.│ │ G ·    │ │ D ·      │ │ E ·       │
+      │ validación│  │ multimod.│ │ fraude │ │ cobertura│ │ resolución│
+      └─────┬─────┘  └────┬─────┘ └───┬────┘ └────┬─────┘ └─────┬─────┘
+            │             │           │           │             │
+            └─────────────┴───────────┴───────────┴─────────────┘
+                       cada radio DEVUELVE el control
+                          al supervisor (nunca a otro radio)
 ```
 
-Esta función decide el siguiente nodo a partir exclusivamente del estado acumulado. Toda la lógica del flujo está concentrada aquí, lo que la hace especialmente legible, testeable y modificable.
+## 3. Los seis agentes
 
-## 4. Los agentes
+El sistema se compone de **seis agentes** organizados en torno al supervisor. Cada agente reside en un fichero separado, siguiendo una convención de nomenclatura dual: el nombre del fichero refleja la responsabilidad funcional, y la letra del agente (A–G) aparece en *docstrings* y *logs* para mantener la trazabilidad con esta memoria.
 
-El sistema se compone de **seis agentes** organizados en torno al supervisor. Cada agente reside en un fichero separado (`document_validator.py`, `fraud_compliance.py`, etc.), siguiendo una convención de nomenclatura dual: el nombre del fichero refleja la responsabilidad funcional, y la letra del agente (A–G) aparece en docstrings y logs para mantener la trazabilidad con esta memoria.
+| Agente | Fichero | Rol | ¿Real o simulado? |
+|--------|---------|-----|-------------------|
+| **A** | `orchestrator.py` | **Supervisor + triaje.** Punto de entrada del grafo; ejecuta el triaje inicial (razona el CoT) y aloja el `supervisor_router` que enruta a los demás agentes. | Lógica real; CoT con LLM real opcional. |
+| **B** | `document_validator.py` | **Validación documental.** Verifica que el expediente contiene los tipos de documento requeridos según el tipo de siniestro; si faltan, solicita información y corta el flujo. | Lógica de validación real sobre el repositorio documental simulado. |
+| **C** | `multimodal_extractor.py` | **Extracción multimodal.** Extrae tipo, importe, fecha, emisor, resumen y confianza de los documentos subidos (factura, foto, acta, PDF). | **IA real** con Claude Vision; *fallback* simulado si no hay archivos o clave de API. |
+| **G** | `fraud_compliance.py` | **Fraude y cumplimiento.** Motor de cuatro detectores deterministas; emite veredicto graduado y marca el caso para HITL o bloqueo. | **Motor real**; lista de sanciones sintética que simula la SDN. |
+| **D** | `coverage_checker.py` | **Verificación de cobertura.** Decide si el siniestro está cubierto recuperando la cláusula relevante de la póliza y citándola (límite, franquicia, neto pagable). | **RAG real** (ChromaDB); pólizas sintéticas; *fallback* determinista. |
+| **E** | `claim_resolver.py` | **Resolución autónoma.** Determina la resolución final (PAGO, RECHAZO o REVISIÓN HUMANA) y la ejecuta. | Lógica real; ejecución de pago/rechazo simulada (*mock*). |
 
-| Agente | Fichero | Rol |
-|--------|---------|-----|
-| **A** | `orchestrator.py` | **Supervisor + triaje.** Punto de entrada del grafo, ejecuta el triaje inicial y aloja el `supervisor_router` que enruta a los demás agentes. |
-| **G** | `fraud_compliance.py` | **Fraude / cumplimiento.** Filtro temprano que comprueba listas OFAC y señales de LA-FT (blanqueo de capitales). |
-| **B** | `document_validator.py` | **Validación documental.** Verifica que el expediente contiene la documentación requerida según el tipo de siniestro. |
-| **C** | `multimodal_extractor.py` | **Extracción multimodal.** Extrae datos del expediente mediante un modelo visión-lenguaje (VLM). |
-| **D** | `coverage_checker.py` | **Verificación de cobertura.** Comprueba si el siniestro está cubierto por la póliza (apoyado en RAG sobre pólizas). |
-| **E** | `claim_resolver.py` | **Resolución autónoma.** Determina la resolución final del expediente (pago, rechazo o derivación HITL por importe). |
+A continuación se describe cada agente con el detalle necesario para fijar qué es real y qué es simulado.
 
-### 4.1. Anatomía interna de un agente: lógica determinista + LLM opcional
+**A · Orquestador** (`orchestrator.py`). Es el punto de entrada del grafo. Su nodo `triage_node` enriquece el estado con el razonamiento de bienvenida (sin decidir aún el enrutamiento) y deja el expediente listo para el primer especialista. La función `supervisor_router`, descrita en la sección anterior, constituye el hub determinista del sistema.
 
-Todos los agentes especializados (B, C, D, E, G) siguen una estructura interna común que combina **lógica determinista** y **razonamiento mediante LLM opcional**. Esta arquitectura híbrida es una decisión de diseño deliberada y constituye uno de los aportes técnicos diferenciales del proyecto.
+**B · Validación documental** (`document_validator.py`). Comprueba que el expediente aporta los tipos de documento exigidos por el tipo de siniestro (por ejemplo, factura y acta para determinados casos). Si detecta documentación incompleta, redacta una solicitud de información al cliente y el supervisor corta el flujo: no es un rechazo, sino una pausa.
 
-La parte determinista contiene la **lógica de negocio crítica que debe ser auditable y reproducible**: la comprobación de qué documentos faltan, el cálculo del score de riesgo, la aplicación de la franquicia, la decisión binaria de cobertura. La parte LLM se encarga del **razonamiento en lenguaje natural y de la justificación de las decisiones**, generando un Chain of Thought legible que se persiste en el log y se muestra al usuario.
+**C · Extracción multimodal** (`multimodal_extractor.py`, apoyado en `vision.py`). Es una de las **capacidades de IA reales** del proyecto. Sobre los documentos efectivamente subidos (factura, foto de daños, acta, PDF, informe de taller), invoca a **Claude Vision** (`claude-sonnet-4-6`) y extrae un objeto estructurado con tipo de documento, importe, fecha, emisor, resumen y confianza de la extracción. Como Claude no es un sistema de Seguros Pepín sino el LLM del propio proyecto, esta extracción es real. Si no se aportan archivos o no hay clave de API disponible, el agente recurre a una **extracción simulada** equivalente, de modo que el flujo nunca se interrumpe.
 
-El razonamiento LLM se obtiene a través del helper `reason()`, que invoca a Claude (`claude-sonnet-4-6`) mediante la interfaz de uso de herramientas de la API (Anthropic, 2024) **si la variable de entorno `ANTHROPIC_API_KEY` está disponible**. En caso contrario, el helper devuelve un **fallback determinista** que produce un razonamiento equivalente sin llamada externa:
+**G · Fraude y cumplimiento** (`fraud_compliance.py`, apoyado en `fraud_tools.py`). Implementa un **motor real de cuatro detectores deterministas**, diseñados para ser auditables señal a señal:
 
-```python
-def reason(system: str, prompt: str, fallback: str) -> str:
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        return fallback
-    try:
-        llm = ChatAnthropic(model="claude-sonnet-4-6", ...)
-        response = llm.invoke([...])
-        return response.content
-    except Exception:
-        return fallback
-```
+1. **Cribado de sanciones (OFAC / ONU).** Compara el nombre del asegurado contra una lista mediante *fuzzy matching* (`difflib.SequenceMatcher`, umbral de similitud 0,82, con normalización de acentos). La lista es **sintética, de 15 entidades, y simula la lista SDN de la OFAC** y la lista de la ONU; en producción se descargaría periódicamente del servicio oficial.
+2. **Anomalía de importe.** Calcula el *Z-score* del importe reclamado frente a una *baseline* por tipo de siniestro (umbral 2,0), marcando también el rebasamiento de un máximo legítimo.
+3. **Duplicados recientes.** Detecta reclamaciones del mismo cliente y tipo dentro de una ventana de 90 días.
+4. **Coherencia documental.** Verifica la consistencia temporal entre los documentos (fechas de siniestro, reclamación y factura), detectando incoherencias como una fecha de siniestro futura o una reclamación previa al siniestro.
 
-Esta dualidad cumple un objetivo concreto: **la demostración funciona siempre**. La dependencia de un servicio externo en una defensa en vivo es un riesgo (caída de red, límite de cuota, latencia), y el fallback determinista lo mitiga garantizando que el flujo se complete con o sin conectividad al LLM.
+Las señales se combinan en un **score compuesto** que produce un **veredicto graduado**: `BLOCKED` (coincidencia OFAC confirmada → rechazo automático), `HIGH_RISK` (score ≥ 0,55 → HITL obligatorio), `MEDIUM_RISK` (score ≥ 0,25 → HITL recomendado) y `CLEAR` (continúa el flujo). El expediente se marca para HITL o bloqueo cuando el veredicto es `HIGH_RISK` o `BLOCKED`.
 
-Esta estructura tiene cuatro consecuencias positivas:
+**D · Verificación de cobertura** (`coverage_checker.py`, apoyado en `rag/policy_store.py`). Es la segunda **capacidad de IA real**: implementa **RAG (Retrieval-Augmented Generation)** (Lewis et al., 2020) con **ChromaDB embebido** (en proceso, sin servidor externo) sobre un corpus de pólizas (`data/policies/*.md`). El agente recupera la cláusula relevante mediante **búsqueda vectorial filtrada por el metadato `claim_type`** y decide la cobertura citando la sección recuperada (límite de cobertura, franquicia y neto pagable). Las pólizas son **sintéticas** (placeholder del prototipo; en producción se sustituirían por las condiciones reales de Seguros Pepín). Si el RAG no está disponible, el agente cae a una verificación determinista (`check_policy`), de modo que la demostración nunca se rompe.
 
-- Las **decisiones críticas no dependen** del comportamiento estocástico de un LLM.
-- El sistema es **testeable**: la lógica determinista se cubre con tests unitarios clásicos.
-- El LLM **aporta valor donde realmente lo añade**: la generación de explicaciones legibles y profesionales para el cliente y el revisor humano.
-- Se **reduce el coste por token**: el LLM solo razona sobre el resultado, no necesita decidirlo.
+**E · Resolución** (`claim_resolver.py`). Toma la decisión final del expediente —**PAGO**, **RECHAZO** o **REVISIÓN HUMANA**— y la ejecuta a través de *mocks* (autorización de pago o notificación de rechazo). La ejecución del pago es simulada porque depende del motor de tesorería de la aseguradora, al que no hay acceso.
 
-## 5. Flujo de una reclamación
+**LLM opcional (`reasoning.py`).** Transversal a los agentes, el helper `reason()` enriquece el Chain of Thought de cada agente invocando a Claude (`claude-sonnet-4-6`) cuando la variable de entorno `ANTHROPIC_API_KEY` está disponible. En su ausencia, devuelve un *fallback* determinista que produce un razonamiento equivalente sin llamada externa. Esto garantiza una propiedad central: **la demostración funciona siempre**, con o sin conectividad al LLM, mitigando el riesgo de una caída de red o de cuota durante una defensa en vivo.
+
+## 4. Flujo de una reclamación
 
 El flujo nominal de extremo a extremo encadena los agentes en el orden:
 
 ```
-A (triaje) → G (fraude) → B (docs) → C (extracción) → D (cobertura) → E (resolución)
+A (triaje) → B (validación docs) → C (extracción) → G (fraude) → D (cobertura) → E (resolución)
 ```
 
-Sobre esta espina dorsal se injertan **ramas condicionales** que pueden desviar el expediente antes de llegar a la resolución automática. Las transiciones son decididas siempre por el supervisor a partir del estado acumulado. El diagrama siguiente muestra el flujo completo con sus cinco salidas posibles:
+Las transiciones las decide siempre el supervisor a partir del estado acumulado. Sobre esta espina dorsal se injertan **ramas condicionales** que pueden desviar el expediente antes de la resolución automática. El siguiente diagrama muestra el flujo completo con sus salidas:
 
 ```
-              ┌──────────────┐
-              │  A · Triaje  │
-              └──────┬───────┘
-                     v
-              ┌──────────────┐   fraude marcado
-              │  G · Fraude  │──────────────────────►  [1] RECHAZO por fraude (END)
-              └──────┬───────┘
-                     v  ok
-              ┌──────────────┐   faltan documentos
-              │   B · Docs   │──────────────────────►  [2] SOLICITUD DE INFORMACIÓN (END)
-              └──────┬───────┘
-                     v  completo
-              ┌──────────────┐
-              │ C·Extracción │
-              └──────┬───────┘
-                     v
-              ┌──────────────┐   sin cobertura
-              │ D · Cobertura│──────────────────────►  [3] RECHAZO justificado
-              └──────┬───────┘
-                     v  cobertura OK
-              ┌──────────────┐   importe > umbral HITL
-              │ E·Resolución │──────────────────────►  [4] REVISIÓN HUMANA (HITL)
-              └──────┬───────┘
-                     v  importe ≤ umbral
-                [5] PAGO automático
+                      ┌──────────────┐
+                      │  A · Triaje  │
+                      └──────┬───────┘
+                             v
+                      ┌──────────────┐   faltan documentos
+                      │   B · Docs   │──────────────────────►  [1] SOLICITUD DE INFORMACIÓN (END)
+                      └──────┬───────┘
+                             v  documentación completa
+                      ┌──────────────┐
+                      │ C·Extracción │  (Claude Vision real / fallback)
+                      └──────┬───────┘
+                             v
+                      ┌──────────────┐   HIGH_RISK o BLOCKED
+                      │  G · Fraude  │──────────────────────►  [2] RECHAZO / HITL por fraude (END)
+                      └──────┬───────┘
+                             v  CLEAR / MEDIUM_RISK
+                      ┌──────────────┐   sin cobertura
+                      │ D · Cobertura│──────────────────────►  [3] RECHAZO justificado
+                      └──────┬───────┘
+                             v  cobertura OK
+                      ┌──────────────┐   importe > umbral HITL
+                      │ E·Resolución │──────────────────────►  [4] REVISIÓN HUMANA (HITL)
+                      └──────┬───────┘
+                             v  importe ≤ umbral
+                        [5] PAGO automático
 ```
 
 Las **cinco salidas** del flujo son:
 
-1. **Rechazo por fraude / OFAC.** Si G detecta una coincidencia en listas OFAC o una señal de LA-FT, el supervisor termina el flujo. El expediente queda marcado como `rejected` con la causa `RECHAZO_FRAUDE`. Es un filtro temprano de cumplimiento.
-2. **Solicitud de información al cliente.** Si B determina que faltan documentos, el flujo termina con estado `validating` y decisión `INFO_REQUERIDA`. No es un rechazo, sino una pausa a la espera de información.
-3. **Rechazo justificado por no cobertura.** Si D concluye que el siniestro no está cubierto por la póliza, E redacta el rechazo y lo notifica al cliente.
-4. **Revisión humana por importe.** Si el siniestro tiene cobertura pero el importe supera el umbral HITL (`HITL_AMOUNT_THRESHOLD`, 5000 € por defecto y configurable), E deriva el expediente a revisión humana antes de autorizar el pago.
+1. **Solicitud de información al cliente.** Si B determina que faltan documentos, el flujo termina con estado `validating` y decisión `INFO_REQUERIDA`. No es un rechazo, sino una pausa a la espera de información.
+2. **Rechazo / HITL por fraude.** Si G emite veredicto `HIGH_RISK` o `BLOCKED`, el supervisor termina el flujo antes de la resolución. El expediente queda marcado como `rejected` con causa `RECHAZO_FRAUDE` (o derivado a revisión humana). Es el *gate* de cumplimiento.
+3. **Rechazo justificado por no cobertura.** Si D concluye que el siniestro no está cubierto por la póliza, E redacta el rechazo citando la cláusula recuperada y lo notifica al cliente.
+4. **Revisión humana por importe.** Si el siniestro tiene cobertura pero el importe supera el umbral HITL (`HITL_AMOUNT_THRESHOLD`, 5.000 € por defecto y configurable), E deriva el expediente a revisión humana antes de autorizar el pago.
 5. **Pago automático.** Si el siniestro tiene cobertura y el importe es igual o inferior al umbral, E autoriza el pago de forma autónoma. Es el camino de máxima automatización.
 
-Esta combinación de espina dorsal fija y ramas condicionales permite que la mayoría de expedientes simples se resuelvan automáticamente, mientras los casos sensibles (fraude, importes elevados) o incompletos se desvían a la intervención adecuada.
+### 4.1. Por qué el cribado de fraude (G) se ejecuta tras la recepción documental
 
-## 6. Gestión de estado y ciclo de ejecución
+Una decisión de diseño relevante es la **posición del Agente G en el flujo**. Aunque conceptualmente el cribado de fraude actúa como un *gate* de cumplimiento previo a la resolución y al pago, el router lo ejecuta **después** de la validación documental (B) y la extracción multimodal (C), y no como primer filtro de entrada. La razón es funcional: dos de los cuatro detectores de G —en particular el de **coherencia documental** y, en parte, el de **anomalía de importe**— necesitan los **datos efectivamente extraídos** de los documentos (fechas de siniestro, factura y reclamación; importe consolidado) para poder operar. Situar G antes de la extracción lo privaría de esa información y degradaría su capacidad de detección.
 
-El estado compartido del grafo se modela mediante `ClaimState`, un `TypedDict` que viaja entre nodos y constituye la única fuente de verdad durante la ejecución. Además de los datos del expediente (identificador, cliente, tipo de siniestro, canal, importes, etc.), `ClaimState` mantiene **dos acumuladores** que crecen a medida que avanza el flujo:
+De este modo, G se beneficia de los datos ya extraídos por C **sin renunciar** a su papel de salvaguarda: sigue actuando como barrera de cumplimiento **antes** de que se verifique la cobertura (D) y, sobre todo, **antes** de cualquier resolución o pago (E). Se concilia así la necesidad de datos del detector con la garantía de que ningún expediente fraudulento llega a pagarse.
+
+## 5. Gestión de estado y ciclo de ejecución
+
+El estado compartido del grafo se modela mediante `ClaimState`, un `TypedDict` que viaja entre nodos y constituye la única fuente de verdad durante la ejecución. LangGraph lo propaga automáticamente: cada agente lee lo que necesita y devuelve una actualización parcial que se fusiona con el estado existente. Sus campos se agrupan en cuatro bloques:
+
+- **Identidad del expediente:** `claim_id`, `client_id`, `client_name`, `client_email`. El nombre del asegurado es necesario para el cribado OFAC de G.
+- **Datos de entrada:** `claim_type`, `amount_requested`, `channel`, `documents` y `uploaded_files` (los archivos binarios reales para el análisis multimodal de C).
+- **Resultados parciales** de cada agente: `validation_result` (B), `extraction_result` (C), `fraud_result` (G), `coverage_result` (D) y `resolution` (E).
+- **Acumuladores y control de flujo:** `reasoning_trace`, `decisions_log`, `status`, `decision`, `hitl_required`, `terminate` y `termination_reason`.
+
+Los **dos acumuladores** crecen a medida que avanza el flujo y son la base de la trazabilidad:
 
 - **`reasoning_trace`** — la traza de Chain of Thought. Cada agente añade su razonamiento, de modo que al final se dispone de la narración completa del proceso de decisión.
-- **`decisions_log`** — el registro de decisiones, con **una entrada por agente** (acción tomada, justificación, confianza, necesidad de HITL). Es la base de la auditabilidad.
+- **`decisions_log`** — el registro de decisiones, con **una entrada por agente** (agente, acción, justificación, confianza, necesidad de HITL). Es la materialización auditable del proceso.
 
-Ambos campos usan `Annotated[list, operator.add]`, lo que indica a LangGraph que las contribuciones de los distintos nodos deben **acumularse** en lugar de sobrescribirse. Es un detalle técnico clave que permite que cada agente añada su entrada sin pisar las anteriores.
+Ambos campos se declaran como `Annotated[list, operator.add]`, lo que indica a LangGraph que las contribuciones de los distintos nodos deben **acumularse** en lugar de sobrescribirse. Es un detalle técnico clave: permite que cada agente añada su entrada sin pisar las anteriores, preservando el Chain of Thought completo.
 
 El ciclo de ejecución se gobierna desde la función `process_claim`, que actúa como punto de entrada de orquestación:
 
 1. Se construye el `ClaimState` inicial a partir del expediente entrante.
-2. Se ejecuta el grafo de LangGraph; cada nodo lee el estado, invoca su herramienta, razona y **escribe** su contribución en los acumuladores antes de ceder el control al supervisor según las transiciones del grafo.
-3. Tras finalizar el grafo, una función auxiliar `_normalize_final_state` deduce el `status` y la `decision` finales en los casos en que el flujo se ha cortado sin pasar por el resolver (por ejemplo, cuando G marca el caso como fraude o B detecta documentos incompletos). Esto garantiza que la respuesta al cliente sea siempre coherente.
-4. Finalmente, `process_claim` realiza la **persistencia centralizada**: guarda el expediente y todas sus decisiones en MariaDB.
+2. Se ejecuta el grafo de LangGraph mediante `ainvoke`; cada nodo lee el estado, invoca su herramienta, razona y **escribe** su contribución en los acumuladores antes de ceder el control al supervisor.
+3. Tras finalizar el grafo, la función auxiliar `_normalize_final_state` deduce el `status` y la `decision` finales en los casos en que el flujo se ha cortado sin pasar por el resolver (por ejemplo, fraude marcado por G o documentos incompletos detectados por B). Esto garantiza que la respuesta al cliente sea siempre coherente.
+4. Finalmente, `process_claim` realiza la **persistencia centralizada** de todas las decisiones en MariaDB, en una única transacción.
 
-Un aspecto importante de resiliencia: la persistencia está **envuelta en `try/except`**. Si la base de datos no está disponible, la excepción se captura y el flujo **igualmente devuelve su resultado** (decisión + traza). De este modo, la demostración no depende de que MariaDB esté levantada, lo que refuerza la propiedad de resiliencia descrita en la sección 1.
+Un aspecto esencial de resiliencia: la persistencia está **envuelta en `try/except`**. Si la base de datos no está disponible (por ejemplo, en la CLI de demostración sin MariaDB), la excepción se captura y el flujo **igualmente devuelve su resultado** (decisión + traza). Se trata de una persistencia *best-effort*: la demostración no depende de que MariaDB esté levantada, lo que refuerza la propiedad de resiliencia descrita en la sección 1.
 
-## 7. Datos y conocimiento
+## 6. Datos y conocimiento
 
-### 7.1. Modelo de datos (MariaDB)
+### 6.1. Modelo de datos (MariaDB)
 
-La persistencia relacional se apoya en tres tablas centrales, diseñadas para dar soporte a la trazabilidad y al ciclo HITL:
+La persistencia relacional se apoya en **MariaDB** mediante **SQLAlchemy 2.0 asíncrono** (driver `aiomysql`) y un patrón repositorio. El esquema se compone de tres tablas centrales, diseñadas para dar soporte a la trazabilidad y al ciclo HITL:
 
-- **`claims`** — el expediente de reclamación. Campos: `id`, `client_id`, `claim_type`, `channel`, `status`, `amount_requested`, `amount_approved` y marcas temporales.
-- **`agent_decisions`** — una fila por decisión de agente, con clave foránea a `claims`. Campos: `id`, `claim_id`, `agent`, `action`, `reasoning`, `confidence`, `hitl_required`, `created_at`. Es la materialización persistente del `decisions_log` y el soporte de la auditoría.
-- **`hitl_feedback`** — registro de las anulaciones (*overrides*) humanas, con claves foráneas a `claims` y a `agent_decisions`. Campos: `id`, `claim_id`, `decision_id`, `reviewer`, `original_action`, `final_action`, `override_reason`. Permite contrastar la decisión automática con la final adoptada por un revisor.
+- **`claims`** — el expediente de reclamación. Recoge identidad del cliente, tipo de siniestro, canal, estado, importe solicitado e importe aprobado, con marcas temporales.
+- **`agent_decisions`** — una fila por decisión de agente, con clave foránea a `claims`. Registra el agente, la acción, el razonamiento (CoT), la confianza, si requirió HITL y el momento. Es la materialización persistente del `decisions_log` y el soporte de la auditoría.
+- **`hitl_feedback`** — registro de las anulaciones (*overrides*) humanas, con claves foráneas a `claims` y a `agent_decisions`. Conserva el revisor, la acción original automática, la acción final adoptada y la razón del *override*, permitiendo contrastar la decisión automática con la humana.
 
-El campo `status` se modela como un **enum** con los valores: `open`, `validating`, `extracting`, `checking_policy`, `checking_fraud`, `resolved`, `rejected`, `pending_review` y `closed`. Estos estados reflejan tanto las etapas del flujo (sección 5) como sus salidas terminales. La definición SQLAlchemy del enum usa `values_callable` para asegurar que la serialización a MariaDB usa los valores en minúscula (no los nombres Python), evitando errores de tipo *LookupError* al releer registros.
+El campo `status` se modela como un **enum** con los valores `open`, `validating`, `extracting`, `checking_policy`, `checking_fraud`, `resolved`, `rejected`, `pending_review` y `closed`. Estos estados reflejan tanto las etapas del flujo (sección 4) como sus salidas terminales.
 
 ```
    claims (1) ───< (N) agent_decisions
@@ -226,94 +183,86 @@ El campo `status` se modela como un **enum** con los valores: `open`, `validatin
         (claim_id)        (decision_id)
 ```
 
-### 7.2. RAG sobre pólizas (ChromaDB) — fase posterior
+### 6.2. RAG sobre pólizas (ChromaDB)
 
-La verificación de cobertura (agente D) se beneficiará de la **recuperación aumentada por generación (RAG)** (Lewis et al., 2020) sobre el corpus de pólizas de Seguros Pepín. El enfoque RAG combina la recuperación de fragmentos relevantes desde una base de conocimiento con la generación de respuestas fundamentadas en esos fragmentos, lo que reduce las alucinaciones y permite citar la cláusula concreta que respalda una decisión de cobertura.
+La verificación de cobertura (Agente D) se apoya en **recuperación aumentada por generación (RAG)** (Lewis et al., 2020) sobre el corpus de pólizas. El enfoque RAG combina la recuperación de fragmentos relevantes desde una base de conocimiento con la generación de respuestas fundamentadas en esos fragmentos, lo que reduce las alucinaciones y permite **citar la cláusula concreta** que respalda una decisión de cobertura.
 
-En la arquitectura, **ChromaDB** actúa como base vectorial donde se indexarían los textos de las pólizas para su recuperación semántica. Conviene precisar, por exactitud, que esta capacidad está prevista como **fase posterior** del proyecto: en la presente entrega ChromaDB forma parte del despliegue como servicio, pero el RAG completo sobre pólizas no es el foco del MVP. Se documenta aquí porque condiciona el diseño de la capa de datos y la responsabilidad del agente D.
+En esta entrega el RAG está **operativo**: **ChromaDB embebido** (en proceso) indexa los documentos de póliza (`data/policies/*.md`), cada uno con un *frontmatter* de metadatos (tipo de siniestro, sección, cobertura, límite, franquicia). El Agente D recupera la cláusula más relevante mediante **búsqueda vectorial con filtrado por el metadato `claim_type`**, robusta con corpus pequeño y escalable a varias cláusulas por tipo. Las pólizas son **sintéticas** (placeholder del prototipo), pendientes de sustitución por las condiciones reales de Seguros Pepín en un despliegue productivo.
+
+## 7. Capacidades de IA reales frente a integraciones simuladas
+
+La frontera entre lo real y lo simulado en este proyecto no separa "inteligencia artificial" de "reglas", sino **integraciones con terceros sin acceso** (necesariamente simuladas) de **capacidades de IA bajo control del proyecto** (reales). Esta sección formaliza ambas listas.
+
+### 7.1. Integraciones externas simuladas (tabla *Mock → Integración real*)
+
+Por cada integración con un sistema de Seguros Pepín al que no hay acceso, se indica el componente que la sustituiría en producción:
+
+| Integración simulada (*mock*) | Agente que la usa | Integración real en Seguros Pepín |
+|-------------------------------|-------------------|-----------------------------------|
+| Listas oficiales de sanciones (OFAC SDN / ONU) | G (fraude / cumplimiento) | Servicio corporativo de *screening* AML / sanciones con suscripción a las listas oficiales actualizadas. |
+| Repositorio documental del expediente | B (validación documental) | Gestor documental / ECM corporativo de la aseguradora. |
+| Catálogo y cláusulas de pólizas | D (verificación de cobertura) | Sistema *core* de pólizas (Policy Administration System), indexado por el RAG real. |
+| Autorización y emisión de pagos | E (resolución) | Motor de pagos / tesorería de Seguros Pepín. |
+| Canales de notificación al cliente | A / E (solicitud de información, resolución) | Plataformas reales de email, portal de cliente y WhatsApp Business. |
+
+### 7.2. Capacidades de IA reales
+
+Frente a lo anterior, las siguientes capacidades se ejecutan de verdad, porque dependen de modelos y motores bajo control del proyecto (no de Seguros Pepín):
+
+| Capacidad real | Agente | Tecnología | Mecanismo de resiliencia |
+|----------------|--------|------------|--------------------------|
+| Extracción multimodal (visión) | C | Claude Vision (`claude-sonnet-4-6`) | *Fallback* a extracción simulada si no hay archivos o clave de API. |
+| RAG sobre pólizas | D | ChromaDB embebido + búsqueda vectorial con filtro de metadato | *Fallback* determinista (`check_policy`) si el RAG no está disponible. |
+| Motor de 4 detectores de fraude | G | Algoritmos deterministas (fuzzy matching, Z-score, ventana temporal, coherencia de fechas) | Determinista por diseño; no depende de servicios externos. |
+| Razonamiento en lenguaje natural (CoT) | A–E, G | Claude (`claude-sonnet-4-6`) vía `reason()` | *Fallback* determinista equivalente si no hay clave de API. |
+
+La combinación de capacidades reales y *fallbacks* deterministas hace que el sistema sea, a la vez, **demostrable de verdad** (las capacidades de IA funcionan) y **resiliente** (el flujo se completa aunque falle cualquier componente opcional).
 
 ## 8. Human-in-the-Loop (HITL)
 
 El sistema incorpora un mecanismo de **Human-in-the-Loop** que reserva a un revisor humano las decisiones de mayor riesgo, en lugar de automatizarlas ciegamente. El HITL se activa mediante un **doble disparador**:
 
-1. **Disparador por fraude/cumplimiento.** Cuando el agente G marca el expediente (coincidencia OFAC o señal de LA-FT), se deriva a revisión humana de forma temprana, antes de continuar el procesamiento. Es una salvaguarda de cumplimiento normativo.
-2. **Disparador por importe.** Cuando el importe del siniestro supera el umbral configurable `HITL_AMOUNT_THRESHOLD` (5000 € por defecto), la resolución (agente E) se deriva a revisión humana aunque la cobertura sea correcta. El umbral, al ser configurable, permite ajustar el grado de automatización a la política de riesgo de la organización.
+1. **Disparador por fraude / cumplimiento.** Cuando el Agente G emite veredicto `HIGH_RISK` o `BLOCKED`, el expediente se marca para revisión humana (o bloqueo) antes de continuar hacia la resolución. Es una salvaguarda de cumplimiento normativo.
+2. **Disparador por importe.** Cuando el importe del siniestro supera el umbral configurable `HITL_AMOUNT_THRESHOLD` (5.000 € por defecto), la resolución (Agente E) se deriva a revisión humana aunque la cobertura sea correcta. Al ser configurable, el umbral permite ajustar el grado de automatización a la política de riesgo de la organización.
 
-Las decisiones revisadas se registran en la tabla `hitl_feedback`, que conserva la acción original automática, la acción final adoptada y la razón del *override*. Este registro no solo cierra el bucle de auditoría, sino que constituye una fuente de datos para una eventual mejora futura de los criterios de decisión automáticos.
+En ambos casos el expediente queda en estado `pending_review`. Las decisiones revisadas se registran en la tabla `hitl_feedback`, que conserva la acción original automática, la acción final adoptada y la razón del *override*. Este registro no solo cierra el bucle de auditoría, sino que constituye una fuente de datos para una eventual mejora futura de los criterios de decisión automáticos.
 
-## 9. Decisiones de diseño clave
+## 9. Despliegue y stack tecnológico
 
-La tabla siguiente resume las principales decisiones arquitectónicas y su justificación:
+### 9.1. Despliegue
 
-| Decisión | Opción adoptada | Alternativa descartada | Justificación |
-|----------|-----------------|------------------------|---------------|
-| Patrón de orquestación | **Supervisor (Hub-and-Spoke)** | Cadena, malla, ReAct libre | Trazabilidad lineal, lógica de flujo centralizada en un único router, extensibilidad sin modificar agentes existentes (LangChain AI, 2024). |
-| Motor de orquestación | **LangGraph** (grafo de estado) | LCEL (cadenas LangChain) | Necesidad de flujo con ramas condicionales, estado compartido y transiciones deterministas; LCEL es más adecuado para cadenas lineales. |
-| Naturaleza de los agentes | **Híbrido determinista + LLM opcional** | Solo LLM o solo reglas | Decisiones críticas auditables, LLM aporta razonamiento natural, coste por token optimizado, demo resiliente sin red. |
-| Nomenclatura de ficheros | **Funcional + letra del agente en docstrings** | Solo IDs o solo nombres | Código autoexplicativo en producción, trazabilidad con la memoria del TFM. |
-| Integraciones externas | **Mocks definitivos** | APIs reales de Seguros Pepín | No hay acceso a las APIs reales; los *mocks* documentan la integración futura y aíslan el cambio en la capa 5. |
-| Razonamiento LLM | **Helper `reason()` con fallback determinista** | Dependencia obligatoria del LLM | Garantiza que la demostración funcione sin conectividad; mitiga el riesgo de fallo en defensa en vivo (Anthropic, 2024). |
-| Persistencia | **Centralizada en `process_claim`, con `try/except`** | Persistencia distribuida por nodo | Simplifica el flujo y aporta resiliencia: si no hay BD, el flujo igual devuelve resultado. |
-| Acceso a base de datos | **SQLAlchemy 2.0 async + aiomysql** | Acceso síncrono | El backend FastAPI es asíncrono; el acceso no bloqueante a MariaDB evita serializar las peticiones. |
-| Modelo LLM | **Claude Sonnet 4.6** (`claude-sonnet-4-6`) | GPT-4o, Mistral Large | Mejor rendimiento en español y *tool use* estable; integración nativa con LangChain (Anthropic, 2024). |
-| Umbral HITL | **Por importe configurable** (`HITL_AMOUNT_THRESHOLD`) | Por confianza del modelo | Criterio auditable y comprensible por el negocio; fácilmente ajustable por configuración. |
+El sistema admite **dos modos de despliegue** complementarios.
 
-### Tabla *Mock → Integración real*
-
-Por cada integración externa simulada se indica el sistema de Seguros Pepín que la sustituiría en producción:
-
-| Integración simulada (*mock*) | Agente que la usa | Integración real en Seguros Pepín |
-|-------------------------------|-------------------|-----------------------------------|
-| Listas de sanciones / blanqueo (OFAC, LA-FT) | G (fraude/cumplimiento) | Servicio corporativo de *screening* AML/sanciones (proveedor de listas OFAC/PEP). |
-| Repositorio documental del expediente | B (validación documental) | Gestor documental / ECM corporativo de la aseguradora. |
-| Extracción de datos de documentos (VLM) | C (extracción multimodal) | Servicio interno de OCR/VLM o plataforma de procesamiento documental. |
-| Catálogo y cláusulas de pólizas | D (verificación de cobertura) | Sistema core de pólizas (Policy Administration System) + RAG sobre el corpus real. |
-| Autorización y emisión de pagos | E (resolución) | Motor de pagos / tesorería de Seguros Pepín. |
-| Canales de notificación al cliente | A / E (solicitud de información, resolución) | Plataformas reales de email, portal de cliente y WhatsApp Business. |
-
-## 10. Despliegue y stack tecnológico
-
-### 10.1. Despliegue (Docker Compose)
-
-El sistema se empaqueta con **Docker Compose** en cinco servicios:
+**(1) Docker Compose — arquitectura completa.** Empaqueta el sistema en **cinco servicios**, con base de datos y servicios reales:
 
 | Servicio | Función | Puerto |
 |----------|---------|--------|
-| `backend` | API REST (FastAPI + Uvicorn) y orquestación | 8000 |
+| `backend` | API REST (FastAPI + Uvicorn) y orquestación de agentes | 8000 |
 | `frontend` | Interfaz de demostración (Streamlit) | 8501 |
-| `chromadb` | Base vectorial para RAG de pólizas | 8080 |
+| `chromadb` | Base vectorial para el RAG de pólizas | 8080 |
 | `mariadb` | Base de datos relacional | 3306 |
 | `adminer` | Administración web de la base de datos | 8082 |
 
-La **API REST** expone los siguientes endpoints principales:
+**(2) App Streamlit autónoma — demo en vivo.** El fichero `streamlit_app.py` es una aplicación autónoma desplegable en **Streamlit Community Cloud** que ejecuta los agentes **en proceso**, sin backend ni MariaDB. Pensada para la demostración en vivo, aprovecha la persistencia *best-effort* (sección 5) y los *fallbacks* deterministas (sección 7) para funcionar sin la infraestructura completa.
 
-- `POST /api/v1/claims/` — procesa un expediente y devuelve la decisión, la traza de Chain of Thought y la información de HITL.
-- `GET /api/v1/claims/` — lista los expedientes con paginación y filtro por estado.
-- `GET /api/v1/claims/{id}` — recupera un expediente y sus decisiones.
-- `GET /api/v1/claims/{id}/trace` — devuelve únicamente el Chain of Thought (la traza completa de decisiones del expediente).
-- `GET /api/v1/agents/status` — estado y descripción de los agentes del sistema.
-- `GET /health` — comprobación de salud del servicio.
-
-El frontend en Streamlit acompaña la demostración con una interfaz de envío de reclamaciones, visualización del Chain of Thought por agente y un historial de expedientes procesados. El flujo puede validarse también de extremo a extremo **sin Docker** mediante una CLI de demostración (`scripts/run_demo.py`), lo que de nuevo favorece la resiliencia de la prueba.
-
-### 10.2. Stack tecnológico
+### 9.2. Stack tecnológico
 
 | Componente | Tecnología |
 |-----------|------------|
 | Lenguaje | Python 3.11 |
 | API REST | FastAPI + Uvicorn |
-| Orquestación agéntica | LangGraph + LangChain |
-| LLM (razonamiento opcional) | Claude Sonnet 4.6 (`claude-sonnet-4-6`) vía API de Anthropic |
-| Base vectorial (RAG) | ChromaDB *(fase posterior)* |
+| Orquestación agéntica | LangGraph + LangChain (Chase, 2022; LangChain AI, 2024) |
+| LLM (visión y razonamiento) | Claude Sonnet 4.6 (`claude-sonnet-4-6`) vía API de Anthropic (Anthropic, 2024) |
+| Base vectorial (RAG) | ChromaDB (embebido en la app autónoma; servicio en Docker) |
 | Base de datos relacional | MariaDB 11.3 |
-| Acceso a datos | SQLAlchemy 2.0 async (driver aiomysql), SQLite en memoria para tests |
-| Frontend demo | Streamlit |
-| Empaquetado / despliegue | Docker Compose (5 servicios) |
-| Calidad | 25 tests automatizados (pytest) sobre SQLite en memoria |
+| Acceso a datos | SQLAlchemy 2.0 async (driver aiomysql); SQLite en memoria para tests |
+| Frontend / demo | Streamlit |
+| Empaquetado / despliegue | Docker Compose (5 servicios) + Streamlit Community Cloud |
+| Calidad | 47 tests automatizados (pytest) sobre SQLite en memoria, sin dependencia de MariaDB |
 
-En cuanto a la **calidad**, el proyecto cuenta con 25 pruebas automatizadas ejecutadas con pytest sobre una base de datos SQLite en memoria, que cubren los agentes individuales, el flujo de orquestación completo, la capa de repositorio, el helper de razonamiento y los endpoints de la API REST. El flujo también se valida de extremo a extremo, sin necesidad de Docker, a través de la CLI de demostración.
+En cuanto a la **calidad**, el proyecto cuenta con **47 pruebas automatizadas** ejecutadas con pytest sobre una base de datos SQLite en memoria, que cubren los agentes individuales, el flujo de orquestación completo, los detectores de fraude (incluida la coherencia documental), el RAG, la capa de repositorio, el helper de razonamiento y los endpoints de la API REST. Al no depender de MariaDB, la suite es reproducible en cualquier entorno.
 
-## 11. Bibliografía
+## 10. Bibliografía
 
 Anthropic. (2024). *Tool use (function calling) — Claude API documentation*. https://docs.anthropic.com/en/docs/tool-use
 

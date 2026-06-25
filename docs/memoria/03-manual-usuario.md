@@ -1,42 +1,48 @@
 # Manual de usuario — Smart-Claims Agent
 
-**Seguros Pepín, S.A. — MVP agéntico de gestión de siniestros**
+**Seguros Pepín, S.A. — MVP agéntico de gestión de siniestros**  
 TFM Máster en Machine Learning e Inteligencia Artificial, OBS Business School
+
+---
 
 ## Índice
 
 1. [Introducción y público objetivo](#1-introducción-y-público-objetivo)
 2. [Requisitos previos](#2-requisitos-previos)
 3. [Configuración del entorno](#3-configuración-del-entorno)
-4. [Puesta en marcha con Docker](#4-puesta-en-marcha-con-docker)
-5. [Uso vía API REST](#5-uso-vía-api-rest)
-6. [Uso vía CLI de demostración (sin Docker)](#6-uso-vía-cli-de-demostración-sin-docker)
+4. [Modo 1 — Docker Compose (arquitectura completa)](#4-modo-1--docker-compose-arquitectura-completa)
+5. [Modo 2 — App Streamlit (demo principal)](#5-modo-2--app-streamlit-demo-principal)
+6. [Modo 3 — CLI de demostración y API REST](#6-modo-3--cli-de-demostración-y-api-rest)
 7. [Interpretación de resultados](#7-interpretación-de-resultados)
 8. [Inspección de la base de datos con Adminer](#8-inspección-de-la-base-de-datos-con-adminer)
 9. [Resolución de problemas frecuentes](#9-resolución-de-problemas-frecuentes)
 10. [Referencias](#10-referencias)
 
+---
+
 ## 1. Introducción y público objetivo
 
-Este manual describe el modo de operación del prototipo **Smart-Claims Agent** en su versión de entrega de TFM. No es un manual de usuario final orientado a un empleado de Seguros Pepín, S.A., sino un **manual operativo para el evaluador técnico** (director del TFM, tribunal académico o desarrollador que revise el prototipo). Su propósito es permitir reproducir, inspeccionar y validar el comportamiento del sistema de forma autónoma.
+Este manual describe el modo de operación del prototipo **Smart-Claims Agent** en su versión de entrega del TFM. No es un manual orientado al empleado final de Seguros Pepín, S.A., sino un **manual operativo para el evaluador técnico** (director del TFM, tribunal académico o desarrollador que revise el prototipo). Su objetivo es permitir reproducir, inspeccionar y validar el comportamiento del sistema de forma autónoma.
 
-El sistema se opera principalmente a través de tres vías:
+El sistema puede operarse de tres formas complementarias:
 
-- **API REST** (interfaz primaria): permite enviar expedientes al orquestador y recibir las decisiones de forma programática, con documentación interactiva accesible en Swagger UI.
-- **Dashboard Streamlit**: interfaz web que muestra el Chain of Thought de cada agente en tiempo real y un historial de los expedientes procesados. Útil para demostraciones visuales y para inspeccionar los razonamientos sin recurrir a la consola.
-- **CLI de demostración** (interfaz sin dependencias externas): ejecuta cuatro casos representativos directamente sobre el orquestador Python, mostrando el Chain of Thought y la decisión final, sin necesidad de Docker ni de base de datos.
+- **Modo 1 — Docker Compose:** levanta los cinco servicios del prototipo (backend FastAPI, frontend Streamlit, ChromaDB, MariaDB y Adminer) en contenedores aislados, con persistencia real en base de datos.
+- **Modo 2 — App Streamlit (la demo principal):** interfaz web autónoma que invoca el grafo de agentes directamente en el mismo proceso Python, sin necesidad de Docker ni de MariaDB. Es la modalidad desplegada en Streamlit Community Cloud y la recomendada para la demostración en vivo ante el tribunal.
+- **Modo 3 — CLI de demostración y API REST:** la CLI ejecuta cuatro casos predefinidos desde línea de comandos y muestra el Chain of Thought; la API REST acepta peticiones HTTP desde curl, Postman o cualquier cliente.
 
-> **Nota sobre integraciones externas:** todas las herramientas que en producción consultarían sistemas reales de Seguros Pepín (motor antifraude, gestor documental, núcleo de pólizas, listas OFAC/ONU) están implementadas como **mocks deterministas**. El LLM (Claude de Anthropic) es **opcional**: si se proporciona la variable `ANTHROPIC_API_KEY`, enriquece el razonamiento de cada agente con cadenas de pensamiento generativas; si no se proporciona, el sistema utiliza un fallback de texto determinista y la demostración funciona de forma idéntica. Véase el apartado 3.3 para más detalles.
+> **Nota sobre integraciones externas:** todas las herramientas que en producción consultarían sistemas reales de Seguros Pepín (motor antifraude OFAC, gestor documental, núcleo de pólizas, sistemas de pago) están implementadas como mocks deterministas o sobre datos reales de la empresa embebidos en ChromaDB. El LLM Claude de Anthropic es **opcional**: si se proporciona `ANTHROPIC_API_KEY`, cada agente genera razonamientos Chain of Thought con el modelo `claude-sonnet-4-6` y el Agente C realiza extracción multimodal real de documentos subidos; sin clave, el sistema usa un fallback determinista y la demo funciona de forma idéntica en cuanto a decisiones.
+
+---
 
 ## 2. Requisitos previos
 
-### 2.1 Opción A — Despliegue completo con Docker (recomendada)
+### 2.1 Modo 1 — Docker Compose
 
 | Requisito | Versión mínima | Notas |
 |---|---|---|
 | Docker Engine | 24.x | Incluye el demonio de contenedores |
-| Docker Compose | v2 (plugin) | `docker compose` (sin guion) |
-| Memoria RAM disponible | 4 GB | Para los cinco servicios en paralelo |
+| Docker Compose | v2 (plugin integrado) | Comando `docker compose` sin guion |
+| RAM disponible | 4 GB | Para los cinco servicios en paralelo |
 | Puertos libres | 8000, 8080, 8082, 8501, 3306 | Véase tabla de servicios en §4 |
 
 Verificación rápida:
@@ -46,82 +52,97 @@ docker --version
 docker compose version
 ```
 
-### 2.2 Opción B — CLI de demostración sin Docker
+### 2.2 Modo 2 — App Streamlit (local) y Modo 3 — CLI
 
 | Requisito | Versión | Notas |
 |---|---|---|
-| Python | 3.11 | Versión exacta recomendada; 3.12 puede funcionar |
-| Dependencias Python | — | Instaladas desde `backend/requirements.txt` |
+| Python | 3.11 | Versión recomendada; 3.12 también es compatible |
+| Dependencias (raíz) | — | `requirements.txt` de la raíz del repositorio (para Streamlit) |
+| Dependencias (backend) | — | `backend/requirements.txt` (para CLI y API) |
 
-En Windows, el lanzador oficial de Python es `py`:
+En Windows el lanzador oficial de Python es `py`:
 
 ```powershell
 py --version
 ```
 
-No se requiere MariaDB ni ChromaDB para la CLI; la persistencia se omite con un aviso de log y el flujo continúa sin errores.
+La app Streamlit y la CLI no requieren MariaDB ni ChromaDB para funcionar; si no están disponibles, el sistema lo detecta y activa el fallback con un aviso de log.
+
+---
 
 ## 3. Configuración del entorno
 
 ### 3.1 Crear el fichero `.env`
 
-El fichero `.env` es la única fuente de configuración del sistema. Se parte de la plantilla incluida en el repositorio:
+El fichero `.env` es la fuente de configuración del sistema. Se parte de la plantilla incluida en el repositorio:
 
 ```bash
-# Desde la raíz del repositorio
+# Bash (Linux / macOS)
 cp .env.example .env
 ```
 
-En Windows (PowerShell):
-
 ```powershell
+# PowerShell (Windows)
 Copy-Item .env.example .env
 ```
 
 ### 3.2 Variables de entorno relevantes
 
-Editar `.env` con los valores adecuados para el entorno de evaluación. La tabla siguiente describe las variables más importantes:
+Editar `.env` con los valores adecuados. La tabla siguiente describe las variables más importantes tal como aparecen en `.env.example`:
 
-| Variable | Valor por defecto | Descripción |
+| Variable | Valor por defecto en `.env.example` | Descripción |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | (vacío) | Clave API de Anthropic (opcional; véase §3.3) |
+| `ANTHROPIC_API_KEY` | `sk-ant-api03-XXXX...` (placeholder) | Clave API de Anthropic. **Opcional** — véase §3.3 |
+| `HITL_AMOUNT_THRESHOLD` | `5000.0` | Umbral (€) por encima del cual se activa la revisión humana (HITL) |
+| `SCA_RAG_ENABLED` | `1` | `1` = el Agente D usa RAG real sobre ChromaDB; vacío o `0` = catálogo determinista |
 | `DB_USER` | `claims_user` | Usuario de aplicación de MariaDB |
-| `DB_PASSWORD` | `claims_dev` | Contraseña del usuario de aplicación |
-| `DB_HOST` | `mariadb` | Hostname del servicio MariaDB |
+| `DB_PASSWORD` | `claims_s3cret_dev` | Contraseña del usuario de aplicación |
+| `DB_HOST` | `mariadb` | Hostname del servicio MariaDB (nombre del contenedor en Docker) |
 | `DB_PORT` | `3306` | Puerto de MariaDB |
 | `DB_NAME` | `smart_claims` | Nombre de la base de datos |
-| `CHROMADB_HOST` | `chromadb` | Hostname del servicio ChromaDB |
-| `CHROMADB_PORT` | `8000` | Puerto interno de ChromaDB |
-| `BACKEND_URL` | `http://backend:8000` | URL del backend (referencia interna entre contenedores) |
-| `HITL_AMOUNT_THRESHOLD` | `5000` | Umbral de importe (€) para activar revisión humana |
-| `MARIADB_ROOT_PASSWORD` | `root_dev` | Contraseña root de MariaDB |
+| `DB_ROOT_PASSWORD` | `root_s3cret_dev` | Contraseña root de MariaDB |
+| `CHROMA_HOST` | `chromadb` | Hostname del servicio ChromaDB |
+| `CHROMA_PORT` | `8000` | Puerto interno de ChromaDB |
+| `CHROMA_COLLECTION` | `pepin_policies` | Colección vectorial con las pólizas de Seguros Pepín |
+| `BACKEND_URL` | `http://backend:8000` | URL interna del backend (entre contenedores Docker) |
+| `ENVIRONMENT` | `development` | Entorno de ejecución |
+| `LOG_LEVEL` | `INFO` | Nivel de log del backend |
 
 ### 3.3 La clave `ANTHROPIC_API_KEY` y el modo fallback
 
-La variable `ANTHROPIC_API_KEY` controla si el razonamiento de los agentes se genera mediante el modelo Claude o mediante el texto determinista de fallback:
+Esta variable controla el nivel de inteligencia real del sistema:
 
-- **Con clave válida:** cada agente invoca a Claude (`claude-sonnet-4-6`) a través del helper `reason()` para generar el razonamiento Chain of Thought. Requiere conexión a internet y una clave de pago activa.
-- **Sin clave (o clave vacía):** el módulo `app/agents/reasoning.py` detecta la ausencia de la variable y retorna el texto de fallback predefinido en cada nodo. **La decisión final del orquestador es idéntica en ambos casos**, ya que la lógica de enrutamiento es determinista (basada en cobertura, importe y documentación), no dependiente del LLM. Para la evaluación académica del prototipo, el modo fallback es suficiente.
+- **Con clave válida:** cada agente llama a `claude-sonnet-4-6` para generar el razonamiento Chain of Thought. El Agente C realiza extracción multimodal real (tipo, importe, fecha, resumen y confianza) sobre los documentos subidos mediante Claude Vision. Requiere conexión a internet y saldo en la cuenta de Anthropic.
+- **Sin clave (o clave vacía):** el módulo de razonamiento detecta la ausencia de la variable y retorna texto de fallback predefinido. **La decisión final del orquestador es idéntica en ambos modos**, ya que la lógica de enrutamiento es determinista (basada en cobertura, importe y documentos aportados). Para la evaluación académica del prototipo, el modo fallback es suficiente.
 
-Para una demostración con razonamiento enriquecido, introducir una clave válida de Anthropic en `.env` antes de levantar los contenedores. Véase la documentación de la API de Anthropic para la gestión de claves (Anthropic, 2024).
+La app Streamlit muestra en la barra lateral el indicador de modo activo:
 
-### 3.4 Umbral HITL
+- `Claude activo (CoT enriquecido)` — con clave.
+- `Modo fallback determinista (sin clave)` — sin clave.
 
-El parámetro `HITL_AMOUNT_THRESHOLD` (valor por defecto: `5000`) determina el importe máximo en euros por debajo del cual el agente resolutor (Agente E) puede aprobar un pago de forma autónoma. Expedientes con importe superior son derivados automáticamente a revisión humana (`REVISION_HUMANA`). Este valor es ajustable sin necesidad de recompilar el código.
+> En Streamlit Community Cloud, la clave se inyecta vía la sección *Secrets* del panel de administración de la app (véase `docs/DEPLOY-STREAMLIT.md`), nunca como variable de entorno del repositorio.
 
-## 4. Puesta en marcha con Docker
+### 3.4 Variable `SCA_RAG_ENABLED` y el Agente D
+
+Cuando `SCA_RAG_ENABLED=1`, el Agente D (Verificación de cobertura) consulta ChromaDB para recuperar el fragmento de póliza más relevante según el tipo de siniestro. Si ChromaDB no está disponible o la variable está vacía/a `0`, el agente cae automáticamente al catálogo determinista sin interrumpir el flujo.
+
+La app Streamlit activa `SCA_RAG_ENABLED=1` por defecto mediante `os.environ.setdefault("SCA_RAG_ENABLED", "1")` al arrancar.
+
+---
+
+## 4. Modo 1 — Docker Compose (arquitectura completa)
 
 ### 4.1 Arranque del sistema
 
-Desde la **raíz del repositorio**, con el fichero `.env` ya configurado:
+Desde la **raíz del repositorio**, con el fichero `.env` configurado:
 
 ```bash
 docker compose up -d --build
 ```
 
-Docker Compose construirá las imágenes locales del backend y el frontend, descargará el resto de imágenes y levantará todos los servicios en segundo plano. El primer arranque puede tardar entre 2 y 5 minutos según la velocidad de descarga.
+Docker Compose construye las imágenes locales del backend y el frontend, descarga el resto de imágenes (`chromadb/chroma:0.5.3`, `mariadb:11.3`, `adminer:4.8.1`) y levanta todos los servicios en segundo plano. El primer arranque puede tardar entre 2 y 5 minutos.
 
-Para ver los logs en tiempo real durante el arranque:
+Para seguir los logs del backend en tiempo real:
 
 ```bash
 docker compose logs -f backend
@@ -129,19 +150,19 @@ docker compose logs -f backend
 
 ### 4.2 Servicios y URLs
 
-| Servicio | Contenedor | Puerto (host) | URL de acceso | Descripción |
+| Servicio | Contenedor | Puerto host | URL | Descripción |
 |---|---|---|---|---|
-| Backend FastAPI | `sca-backend` | 8000 | `http://localhost:8000` | API REST principal |
-| Frontend Streamlit | `sca-frontend` | 8501 | `http://localhost:8501` | Dashboard de demostración |
-| ChromaDB | `sca-chromadb` | 8080 | `http://localhost:8080` | Vector store RAG |
-| MariaDB | `sca-mariadb` | 3306 | `localhost:3306` | Base de datos relacional |
-| Adminer | `sca-adminer` | 8082 | `http://localhost:8082` | Inspector web de BD |
+| Backend FastAPI | `sca-backend` | 8000 | `http://localhost:8000` | API REST + orquestador LangGraph |
+| Frontend Streamlit | `sca-frontend` | 8501 | `http://localhost:8501` | Dashboard (versión con API) |
+| ChromaDB | `sca-chromadb` | 8080 | `http://localhost:8080` | Vector store para RAG de pólizas |
+| MariaDB | `sca-mariadb` | 3306 | `localhost:3306` | Persistencia relacional |
+| Adminer | `sca-adminer` | 8082 | `http://localhost:8082` | Inspector web de la BD |
 
-> **Nota sobre dependencias de arranque:** el contenedor `sca-backend` espera a que MariaDB supere su healthcheck antes de iniciarse. Si el backend aparece como restarting en los primeros segundos, es comportamiento normal.
+> El contenedor `sca-backend` espera a que MariaDB supere su healthcheck antes de iniciarse (condición `service_healthy` en `docker-compose.yml`). Si el backend aparece como `restarting` en los primeros 30-60 segundos, es comportamiento normal.
 
 ### 4.3 Verificación del sistema
 
-Una vez levantados los contenedores, verificar que el backend responde correctamente:
+Verificar que el backend responde:
 
 ```bash
 curl http://localhost:8000/health
@@ -153,7 +174,7 @@ Respuesta esperada:
 {"status": "ok", "version": "0.5.0"}
 ```
 
-Verificar también el estado de los agentes:
+Consultar el estado de los seis agentes:
 
 ```bash
 curl http://localhost:8000/api/v1/agents/status
@@ -176,270 +197,221 @@ Respuesta esperada (resumen):
 }
 ```
 
+La documentación Swagger interactiva está disponible en `http://localhost:8000/docs`.
+
 ### 4.4 Parada del sistema
 
 ```bash
+# Detener los contenedores (conserva los volúmenes de datos)
 docker compose down
-```
 
-Para parar y eliminar también los volúmenes de datos:
-
-```bash
+# Detener y eliminar también los volúmenes
 docker compose down -v
 ```
 
-## 5. Uso vía API REST
+---
 
-### 5.1 Documentación interactiva (Swagger UI)
+## 5. Modo 2 — App Streamlit (demo principal)
 
-FastAPI genera automáticamente una interfaz Swagger disponible en:
+La app Streamlit (`streamlit_app.py`) es la **interfaz principal para la demostración**. Invoca el grafo de agentes directamente en el mismo proceso Python, sin backend FastAPI ni MariaDB. Está disponible como demo en vivo en Streamlit Community Cloud y también puede ejecutarse en local.
 
-```
-http://localhost:8000/docs
-```
+### 5.1 Arranque en local
 
-Desde esta URL es posible explorar todos los endpoints, ver los esquemas de request/response y ejecutar peticiones directamente desde el navegador (FastAPI, 2024).
-
-### 5.2 Endpoint principal: procesado de un expediente
-
-**`POST /api/v1/claims/`**
-
-Procesa un expediente de siniestro a través del grafo de agentes y devuelve la decisión, la traza de razonamiento y si se requiere intervención humana.
-
-#### Campos del cuerpo de la petición
-
-| Campo | Tipo | Obligatorio | Descripción |
-|---|---|---|---|
-| `claim_id` | `string` | No | Si se omite, el backend genera uno automático con formato `CLM-XXXXXXXX` |
-| `client_id` | `string` | Sí | Identificador del asegurado |
-| `client_email` | `string` | No (default: `cliente@example.com`) | Email para notificaciones |
-| `claim_type` | `string` | Sí | Tipo de siniestro (véase §5.3) |
-| `channel` | `string` | No (default: `email`) | Canal de entrada: `email`, `web`, `whatsapp` |
-| `amount_requested` | `float` | No (default: `0.0`) | Importe reclamado en euros |
-| `documents` | `list[string]` | No (default: `[]`) | Lista de documentos aportados |
-| `text` | `string` | No (default: `""`) | Descripción libre del siniestro |
-
-#### Campos de la respuesta
-
-| Campo | Tipo | Descripción |
-|---|---|---|
-| `claim_id` | `string` | Identificador del expediente procesado |
-| `status` | `string` | Estado final: `resolved`, `rejected`, `pending_review` o `validating` |
-| `decision` | `string` | Decisión final: `PAGO`, `RECHAZO`, `RECHAZO_FRAUDE`, `REVISION_HUMANA` o `INFO_REQUERIDA` |
-| `amount_requested` | `float` | Importe solicitado |
-| `amount_paid` | `float` o `null` | Importe efectivamente abonado (solo en pagos aprobados) |
-| `hitl_required` | `boolean` | `true` si el expediente requiere revisión humana |
-| `termination_reason` | `string` o `null` | Causa de la terminación del flujo |
-| `reasoning_trace` | `list[string]` | Chain of Thought completo, una entrada por agente invocado |
-
-### 5.3 Tipos de siniestro y documentos requeridos
-
-El mock de `validate_documents` exige un conjunto de documentos distinto según el tipo de siniestro:
-
-| `claim_type` | Documentos requeridos | Cobertura mock |
-|---|---|---|
-| `danys_propis` | `foto_danys`, `factura`, `denuncia_companyia` | Cubierto (límite 10.000 €, franquicia 300 €) |
-| `responsabilitat` | `foto_danys`, `acta_policial`, `dades_tercer` | Cubierto (límite 50.000 €, sin franquicia) |
-| `robatori` | `acta_policial`, `llista_objectes_robats` | Cubierto (límite 8.000 €, franquicia 500 €) |
-| `danys_mecanics` | `informe_taller`, `factura` | **No cubierto** (exclusión SP-PCS-009 § 7.3) |
-| `default` | `foto_danys`, `factura` | No catalogado, sin cobertura |
-
-### 5.4 Ejemplos `curl` — los cinco caminos del flujo
-
-#### Camino 1: PAGO — daños propios, importe bajo, documentación completa
-
-```bash
-curl -s -X POST http://localhost:8000/api/v1/claims/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "claim_id": "CLM-PAGO-01",
-    "client_id": "C-A",
-    "claim_type": "danys_propis",
-    "channel": "email",
-    "amount_requested": 3200.0,
-    "documents": ["foto_danys", "factura", "denuncia_companyia"],
-    "text": "Colisión frontal al aparcar. Daños en la carrocería delantera."
-  }'
-```
-
-Respuesta esperada (resumen):
-
-```json
-{
-  "claim_id": "CLM-PAGO-01",
-  "status": "resolved",
-  "decision": "PAGO",
-  "amount_paid": 2900.0,
-  "hitl_required": false,
-  "termination_reason": "pago aprobado",
-  "reasoning_trace": [
-    "Agente A: expediente CLM-PAGO-01 ...",
-    "Agente G: riesgo de fraude 0.12, sin indicios relevantes.",
-    "Agente B: documentación completa y conforme.",
-    "Agente C: extraídos 3 documentos con confianza media 0.91.",
-    "Agente D: siniestro cubierto según SP-PCS-009 § 3.2.",
-    "Agente E: cobertura confirmada y 2900.00 EUR dentro del umbral; PAGO aprobado."
-  ]
-}
-```
-
-El importe pagado (2900 €) corresponde a 3200 € reclamados menos 300 € de franquicia.
-
-#### Camino 2: REVISION_HUMANA — importe supera el umbral HITL
-
-```bash
-curl -s -X POST http://localhost:8000/api/v1/claims/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "claim_id": "CLM-HITL-01",
-    "client_id": "C-B",
-    "claim_type": "responsabilitat",
-    "channel": "web",
-    "amount_requested": 8500.0,
-    "documents": ["foto_danys", "acta_policial", "dades_tercer"],
-    "text": "Accidente de tráfico con vehículo de tercero. Daños materiales importantes."
-  }'
-```
-
-Respuesta esperada (resumen):
-
-```json
-{
-  "claim_id": "CLM-HITL-01",
-  "status": "pending_review",
-  "decision": "REVISION_HUMANA",
-  "amount_paid": null,
-  "hitl_required": true,
-  "termination_reason": "importe 8500.0 EUR supera umbral HITL (5000.0 EUR)"
-}
-```
-
-#### Camino 3: RECHAZO — tipo sin cobertura
-
-```bash
-curl -s -X POST http://localhost:8000/api/v1/claims/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "claim_id": "CLM-RECH-01",
-    "client_id": "C-C",
-    "claim_type": "danys_mecanics",
-    "channel": "email",
-    "amount_requested": 1000.0,
-    "documents": ["informe_taller", "factura"],
-    "text": "Avería del motor por desgaste. Solicito cobertura de reparación."
-  }'
-```
-
-Respuesta esperada (resumen):
-
-```json
-{
-  "claim_id": "CLM-RECH-01",
-  "status": "rejected",
-  "decision": "RECHAZO",
-  "hitl_required": false,
-  "termination_reason": "rechazado por no cobertura"
-}
-```
-
-#### Camino 4: INFO_REQUERIDA — documentación incompleta
-
-```bash
-curl -s -X POST http://localhost:8000/api/v1/claims/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "claim_id": "CLM-INFO-01",
-    "client_id": "C-D",
-    "claim_type": "danys_propis",
-    "channel": "email",
-    "amount_requested": 1000.0,
-    "documents": ["factura"],
-    "text": "Daños en el vehículo por piedra en autopista. Adjunto factura."
-  }'
-```
-
-Respuesta esperada (resumen):
-
-```json
-{
-  "claim_id": "CLM-INFO-01",
-  "status": "validating",
-  "decision": "INFO_REQUERIDA",
-  "hitl_required": false,
-  "termination_reason": "documentacion incompleta: faltan foto_danys, denuncia_companyia"
-}
-```
-
-#### Camino 5: RECHAZO_FRAUDE — alerta del cribado antifraude
-
-Este caso depende del valor aleatorio generado por el mock de `check_fraud`. Si el `risk_score` supera 0,30, el supervisor termina el flujo con la causa `RECHAZO_FRAUDE`. Para reproducirlo deterministamente, se puede usar una semilla específica desde la CLI (véase §6).
-
-### 5.5 Otros endpoints
-
-| Endpoint | Método | Descripción |
-|---|---|---|
-| `/api/v1/claims/` | GET | Lista los expedientes con paginación y filtro opcional por estado |
-| `/api/v1/claims/{claim_id}` | GET | Devuelve el expediente con todas sus decisiones |
-| `/api/v1/claims/{claim_id}/trace` | GET | Devuelve únicamente el Chain of Thought completo |
-| `/api/v1/agents/status` | GET | Información sobre los agentes del sistema |
-| `/health` | GET | Comprobación de salud del servicio |
-
-Ejemplo de consulta de un expediente:
-
-```bash
-curl -s http://localhost:8000/api/v1/claims/CLM-PAGO-01
-```
-
-Si el expediente no existe, la respuesta es `HTTP 404`.
-
-## 6. Uso vía CLI de demostración (sin Docker)
-
-### 6.1 Instalación de dependencias
-
-Desde la carpeta `backend/` del repositorio:
+Desde la **raíz del repositorio**:
 
 ```powershell
 # Windows
-py -m pip install -r requirements.txt
+py -m streamlit run streamlit_app.py
 ```
 
 ```bash
 # Linux / macOS
-python3.11 -m pip install -r requirements.txt
+python3.11 -m streamlit run streamlit_app.py
 ```
 
-### 6.2 Ejecución
+La app abre automáticamente en el navegador en `http://localhost:8501`.
+
+Para el despliegue en Streamlit Community Cloud, consultar `docs/DEPLOY-STREAMLIT.md` (repositorio `FreeBarnOwl/smart-claims-agent-vfull`, rama `main`, fichero principal `streamlit_app.py`).
+
+### 5.2 Estructura de la interfaz
+
+La app tiene una cabecera de marca Seguros Pepín con estética Salesforce Lightning (azul corporativo `#0B4DA2`, acento naranja `#F39200`) y una barra de navegación lateral con cuatro secciones:
+
+| Sección | Descripción |
+|---|---|
+| **Inicio** | Pantalla de bienvenida con accesos directos a las cuatro acciones principales |
+| **Nueva reclamación** | Formulario completo + escenarios rápidos de un clic |
+| **Historial** | Tabla resumen de todos los expedientes procesados en la sesión y gráfico de distribución por decisión |
+| **Arquitectura** | Descripción del patrón Supervisor (Hub-and-Spoke), los seis agentes y las características clave del sistema |
+
+La barra lateral también muestra el indicador de modo LLM (Claude activo vs. fallback determinista).
+
+### 5.3 Crear una reclamación: escenarios rápidos
+
+En la vista **Nueva reclamación**, la sección superior muestra cuatro botones de escenario rápido, uno por cada camino principal del flujo:
+
+| Botón | `claim_type` | Importe | Documentos | Decisión esperada |
+|---|---|---|---|---|
+| Pago automático | `danys_propis` | 2.500 € | Completos | `PAGO` |
+| Revisión humana (HITL) | `responsabilitat` | 9.500 € | Completos | `REVISION_HUMANA` |
+| Información requerida | `danys_propis` | 3.000 € | Solo `factura` | `INFO_REQUERIDA` |
+| Rechazo por no cobertura | `danys_mecanics` | 1.500 € | Completos | `RECHAZO` |
+
+Al pulsar **Procesar** en cualquiera de ellos, el expediente se envía directamente al orquestador y el resultado aparece debajo del formulario.
+
+### 5.4 Crear una reclamación: formulario personalizado
+
+El formulario personalizado permite ajustar todos los parámetros del expediente:
+
+| Campo | Descripción |
+|---|---|
+| **Nombre del asegurado** | Se compara contra la lista sintética OFAC en el Agente G. Valor por defecto: `Juan García`. |
+| **ID Cliente** | Identificador del asegurado. Valor por defecto: `CLIENT-A`. |
+| **Email del cliente** | Dirección de notificaciones. |
+| **Tipo de siniestro** | Selector con los cuatro tipos disponibles (véase §5.6). |
+| **Importe reclamado (€)** | Campo numérico de 0 a 100.000 €, paso de 100 €. |
+| **Documentos aportados (tipo)** | Selector múltiple con los documentos requeridos para el tipo elegido. Deseleccionar alguno simula documentación incompleta y provoca `INFO_REQUERIDA`. |
+| **Sube los documentos reales** | `file_uploader` que acepta PNG, JPG, JPEG, WEBP y PDF. Los ficheros subidos son procesados por el **Agente C con Claude Vision** (requiere `ANTHROPIC_API_KEY`). |
+
+Pulsar **Procesar reclamación** envía el expediente al orquestador. Los ficheros subidos se convierten en la estructura que espera el Agente C: nombre, tipo MIME, bytes y tipo de documento (`auto`).
+
+### 5.5 Cómo disparar cada uno de los cinco caminos del flujo
+
+#### Camino 1: PAGO automático
+
+- Tipo: `Daños propios`
+- Importe: cualquier valor hasta 5.000 € (o el umbral configurado en `HITL_AMOUNT_THRESHOLD`)
+- Documentos: seleccionar todos (`foto_danys`, `factura`, `denuncia_companyia`)
+- Nombre: cualquiera que no figure en la lista OFAC
+
+#### Camino 2: REVISION_HUMANA por importe elevado
+
+- Tipo: `Responsabilidad civil` (o cualquier tipo cubierto)
+- Importe: superior a 5.000 € (p. ej., 9.500 €)
+- Documentos: completos
+- El Agente E detecta que el importe supera el umbral HITL y deriva el expediente a revisión humana.
+
+#### Camino 3: RECHAZO por falta de cobertura
+
+- Tipo: `Daños mecánicos`
+- Importe y documentos: cualquier valor
+- El Agente D determina que `danys_mecanics` está excluido de la póliza (exclusión SP-PCS-009 § 7.3) y el Agente E emite el rechazo.
+
+#### Camino 4: INFO_REQUERIDA por documentación incompleta
+
+- Tipo: cualquier tipo cubierto (p. ej., `Daños propios`)
+- Documentos: deseleccionar uno o más de los requeridos (p. ej., dejar solo `factura`)
+- El Agente B detecta los documentos faltantes y el flujo se detiene con `INFO_REQUERIDA`.
+
+#### Camino 5: BLOQUEO por fraude / coincidencia OFAC
+
+- En el campo **Nombre del asegurado**, introducir un nombre presente en la lista sintética OFAC que usa el Agente G, por ejemplo:
+
+  ```
+  Viktor Nikolaev Kozlov
+  ```
+
+- El Agente G realiza una comparación difusa (fuzzy matching) entre el nombre introducido y la lista de sanciones. Si la similitud supera el umbral, marca el expediente como `FLAGGED` y el orquestador termina el flujo con decisión `RECHAZO_FRAUDE`.
+
+### 5.6 Tipos de siniestro disponibles
+
+| Clave interna | Etiqueta en el formulario | Cobertura | Documentos requeridos |
+|---|---|---|---|
+| `danys_propis` | Daños propios | Cubierto | `foto_danys`, `factura`, `denuncia_companyia` |
+| `responsabilitat` | Responsabilidad civil | Cubierto | `foto_danys`, `acta_policial`, `dades_tercer` |
+| `robatori` | Robo | Cubierto | `acta_policial`, `llista_objectes_robats` |
+| `danys_mecanics` | Daños mecánicos | **Excluido** | `informe_taller`, `factura` |
+
+### 5.7 Lectura del resultado
+
+Una vez procesado el expediente, la app muestra el resultado en varias secciones:
+
+**Cabecera del expediente**
+
+- Identificador generado automáticamente (formato `CLM-XXXXXXXX`).
+- Pastilla de color con la decisión: verde (`PAGO`), rojo (`RECHAZO` / `RECHAZO_FRAUDE`), naranja (`REVISION_HUMANA`), azul (`INFO_REQUERIDA`).
+- Causa de terminación del flujo (`termination_reason`).
+
+**Métricas principales** (cuatro tarjetas)
+
+- Estado del expediente (`resolved`, `rejected`, `pending_review`, `validating`).
+- Decisión final.
+- Importe pagado vs. importe solicitado.
+- Tiempo de procesamiento en segundos.
+
+**Cribado antifraude (Agente G)**
+
+- Veredicto: `CLEAR` (verde) o `FLAGGED` (rojo).
+- Score de riesgo numérico entre 0 y 1.
+
+**Cobertura (Agente D · RAG sobre pólizas)**
+
+- Visible solo cuando `SCA_RAG_ENABLED=1` y ChromaDB está disponible.
+- Indica la sección de póliza recuperada y muestra el fragmento de texto extraído de los documentos de Seguros Pepín.
+
+**Extracción multimodal real (Agente C · Claude Vision)**
+
+- Visible solo cuando se han subido ficheros y `ANTHROPIC_API_KEY` está configurada.
+- Por cada documento subido: tipo de documento, importe leído, fecha, nivel de confianza y resumen textual generado por Claude.
+
+**Cadena de razonamiento de los agentes (Chain of Thought)**
+
+- Timeline con una tarjeta por cada agente que intervino en el flujo.
+- Muestra el nombre del agente, la acción realizada y el razonamiento completo.
+- El orden de intervención es: A (triaje) → G (antifraude) → B (validación documental) → C (extracción) → D (cobertura) → E (resolución).
+
+---
+
+## 6. Modo 3 — CLI de demostración y API REST
+
+### 6.1 CLI de demostración
+
+La CLI ejecuta cuatro expedientes predefinidos directamente sobre el orquestador Python y muestra el Chain of Thought y la decisión en la terminal. No requiere Docker, MariaDB ni ChromaDB.
+
+#### Instalación de dependencias (una sola vez)
 
 ```powershell
-# Windows (desde la raíz del repositorio)
+# Windows — desde la raíz del repositorio
+py -m pip install -r backend/requirements.txt
+```
+
+```bash
+# Linux / macOS
+python3.11 -m pip install -r backend/requirements.txt
+```
+
+#### Ejecución
+
+```powershell
+# Windows — desde la raíz del repositorio
 py backend/scripts/run_demo.py
 ```
 
 ```bash
-# Linux / macOS (desde la raíz del repositorio)
+# Linux / macOS
 python3.11 backend/scripts/run_demo.py
 ```
 
-O alternativamente con Docker, si el contenedor del backend está levantado:
+O desde el contenedor del backend (si Docker está levantado):
 
 ```bash
 docker exec -it sca-backend python scripts/run_demo.py
 ```
 
-### 6.3 Casos de demostración
+#### Casos de demostración
 
-El script ejecuta cuatro expedientes predefinidos con una semilla aleatoria fija (`random.seed(7)`) para garantizar reproducibilidad en cada ejecución ante el tribunal:
+El script ejecuta cuatro expedientes con una semilla aleatoria fija (`random.seed(7)`) para garantizar reproducibilidad:
 
 | Expediente | `claim_type` | Importe | Documentos | Decisión esperada |
 |---|---|---|---|---|
 | `DEMO-PAGO` | `danys_propis` | 3.200 € | Completos | `PAGO` |
 | `DEMO-HITL` | `responsabilitat` | 8.500 € | Completos | `REVISION_HUMANA` |
-| `DEMO-RECHAZO` | `danys_mecanics` | 1.000 € | Completos | `RECHAZO` o `RECHAZO_FRAUDE` (según semilla) |
+| `DEMO-RECHAZO` | `danys_mecanics` | 1.000 € | Completos | `RECHAZO` |
 | `DEMO-INFO` | `danys_propis` | 1.000 € | Solo `factura` | `INFO_REQUERIDA` |
 
-### 6.4 Salida esperada
+> Cada caso aplica su propia semilla aleatoria antes de invocar al orquestador, de forma que los resultados son independientes del orden de ejecución.
 
-Para cada expediente, la CLI muestra un bloque con el siguiente formato:
+#### Ejemplo de salida
 
 ```
 ------------------------------------------------------------------------------
@@ -462,39 +434,208 @@ Para cada expediente, la CLI muestra un bloque con el siguiente formato:
       Importe pagado: 2900.0 EUR
 ```
 
-La traza muestra el razonamiento de cada agente en el orden en que intervino en el grafo: A (triaje) → G (antifraude) → B (validación documental) → C (extracción multimodal) → D (verificación de póliza) → E (resolución).
+El importe pagado (2.900 €) corresponde a los 3.200 € reclamados menos la franquicia de 300 € de la póliza de daños propios.
 
-> **Sin MariaDB:** la CLI imprime un aviso de log del tipo `WARNING: No se han podido persistir las decisiones de DEMO-PAGO: ...` pero continúa procesando todos los expedientes. La lógica agéntica es independiente de la persistencia.
+### 6.2 API REST
+
+Con el backend levantado (Docker o ejecución local), la API REST acepta peticiones en `http://localhost:8000`.
+
+#### Endpoints disponibles
+
+| Método | Endpoint | Descripción |
+|---|---|---|
+| `GET` | `/health` | Estado del servicio (`{"status":"ok","version":"0.5.0"}`) |
+| `GET` | `/api/v1/agents/status` | Estado y descripción de los seis agentes |
+| `POST` | `/api/v1/claims/` | Procesa un expediente → decisión + CoT + HITL |
+| `GET` | `/api/v1/claims/` | Lista expedientes (paginación y filtro por estado) |
+| `GET` | `/api/v1/claims/{claim_id}` | Detalle de un expediente con todas sus decisiones |
+| `GET` | `/api/v1/claims/{claim_id}/trace` | Solo el Chain of Thought de un expediente |
+
+La documentación Swagger interactiva está en `http://localhost:8000/docs`.
+
+#### Ejemplo 1: PAGO (daños propios, importe bajo, docs completos)
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/claims/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "claim_id": "CLM-PAGO-01",
+    "client_id": "C-A",
+    "claim_type": "danys_propis",
+    "channel": "email",
+    "amount_requested": 3200.0,
+    "documents": ["foto_danys", "factura", "denuncia_companyia"]
+  }'
+```
+
+Respuesta esperada (resumen):
+
+```json
+{
+  "claim_id": "CLM-PAGO-01",
+  "status": "resolved",
+  "decision": "PAGO",
+  "amount_paid": 2900.0,
+  "hitl_required": false
+}
+```
+
+#### Ejemplo 2: REVISION_HUMANA (importe supera el umbral HITL)
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/claims/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "claim_id": "CLM-HITL-01",
+    "client_id": "C-B",
+    "claim_type": "responsabilitat",
+    "channel": "web",
+    "amount_requested": 8500.0,
+    "documents": ["foto_danys", "acta_policial", "dades_tercer"]
+  }'
+```
+
+Respuesta esperada (resumen):
+
+```json
+{
+  "claim_id": "CLM-HITL-01",
+  "status": "pending_review",
+  "decision": "REVISION_HUMANA",
+  "amount_paid": null,
+  "hitl_required": true,
+  "termination_reason": "importe 8500.0 EUR supera umbral HITL (5000.0 EUR)"
+}
+```
+
+#### Ejemplo 3: RECHAZO (tipo sin cobertura)
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/claims/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "claim_id": "CLM-RECH-01",
+    "client_id": "C-C",
+    "claim_type": "danys_mecanics",
+    "channel": "email",
+    "amount_requested": 1000.0,
+    "documents": ["informe_taller", "factura"]
+  }'
+```
+
+Respuesta esperada (resumen):
+
+```json
+{
+  "claim_id": "CLM-RECH-01",
+  "status": "rejected",
+  "decision": "RECHAZO",
+  "hitl_required": false,
+  "termination_reason": "rechazado por no cobertura"
+}
+```
+
+#### Ejemplo 4: INFO_REQUERIDA (documentación incompleta)
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/claims/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "claim_id": "CLM-INFO-01",
+    "client_id": "C-D",
+    "claim_type": "danys_propis",
+    "channel": "email",
+    "amount_requested": 1000.0,
+    "documents": ["factura"]
+  }'
+```
+
+Respuesta esperada (resumen):
+
+```json
+{
+  "claim_id": "CLM-INFO-01",
+  "status": "validating",
+  "decision": "INFO_REQUERIDA",
+  "hitl_required": false,
+  "termination_reason": "documentacion incompleta: faltan foto_danys, denuncia_companyia"
+}
+```
+
+#### Consultar un expediente ya procesado
+
+```bash
+curl -s http://localhost:8000/api/v1/claims/CLM-PAGO-01
+```
+
+Si el expediente no existe en la base de datos, la respuesta es `HTTP 404`.
+
+---
 
 ## 7. Interpretación de resultados
 
 ### 7.1 Decisiones posibles
 
-| Decisión | Significado | `hitl_required` | Estado en BD |
+| Decisión | Significado | `hitl_required` | Estado (`status`) |
 |---|---|---|---|
-| `PAGO` | Expediente aprobado. El importe se procesa de forma autónoma (mock de transferencia). | `false` | `resolved` |
-| `RECHAZO` | Expediente rechazado por ausencia de cobertura en póliza. Se envía notificación al cliente. | `false` | `rejected` |
-| `RECHAZO_FRAUDE` | Expediente bloqueado por el cribado antifraude (Agente G marca el caso como flagged). | `false` | `rejected` |
-| `REVISION_HUMANA` | El importe supera el umbral `HITL_AMOUNT_THRESHOLD`. Un operador humano debe intervenir. | `true` | `pending_review` |
+| `PAGO` | Expediente aprobado. Pago procesado de forma autónoma (mock de transferencia). | `false` | `resolved` |
+| `RECHAZO` | Expediente rechazado por ausencia de cobertura en póliza. Se emite notificación al cliente (mock). | `false` | `rejected` |
+| `RECHAZO_FRAUDE` | Expediente bloqueado por el cribado antifraude: el Agente G marcó el caso como `FLAGGED`. | `false` | `rejected` |
+| `REVISION_HUMANA` | El importe supera `HITL_AMOUNT_THRESHOLD` (5.000 € por defecto). Un operador humano debe revisar el expediente. | `true` | `pending_review` |
 | `INFO_REQUERIDA` | Documentación incompleta. El expediente queda en espera de los documentos pendientes. | `false` | `validating` |
 
-### 7.2 El campo `hitl_required`
+### 7.2 Human-in-the-Loop (HITL) y el campo `hitl_required`
 
-El campo booleano `hitl_required` en la respuesta indica de forma explícita si el expediente ha sido derivado a revisión humana. Se activa únicamente cuando la decisión es `REVISION_HUMANA` por superar el umbral de importe. Otros caminos terminales (rechazo por fraude, rechazo por no cobertura, solicitud de información) no requieren revisión humana porque la decisión automática es ya definitiva o pasiva (a la espera del cliente).
+El campo booleano `hitl_required` indica de forma explícita si el expediente requiere intervención humana. Se activa cuando la decisión es `REVISION_HUMANA`, es decir, cuando el importe supera el umbral configurado en `HITL_AMOUNT_THRESHOLD`. El diseño garantiza que ningún pago de alto valor se resuelve de forma totalmente autónoma, conforme a los principios de IA responsable.
 
-El diseño de Human-in-the-Loop responde a los principios de IA responsable recogidos en la literatura sobre sistemas agénticos (Russell, 2019; Amershi et al., 2019): ningún pago de alto valor se resuelve de forma totalmente autónoma.
+El umbral es configurable sin necesidad de recompilar el código: basta con cambiar el valor de `HITL_AMOUNT_THRESHOLD` en `.env` y reiniciar el servicio.
 
-### 7.3 El campo `reasoning_trace` — Chain of Thought
+### 7.3 Veredicto de fraude (Agente G)
 
-`reasoning_trace` es una lista de cadenas donde cada elemento corresponde al razonamiento de un agente del grafo. La lista crece a medida que avanza el flujo, gracias a los acumuladores `Annotated[list, operator.add]` definidos en `ClaimState`. El primer elemento corresponde al Agente A (triaje), los siguientes a los agentes especializados invocados (G, B, C, D, E).
+El Agente G actúa como filtro de entrada antes de los demás agentes especializados. Su motor antifraude combina cuatro detectores:
 
-El Chain of Thought visible permite al evaluador:
+1. **OFAC fuzzy:** comparación difusa entre el nombre del asegurado y la lista sintética de sanciones.
+2. **Importe anómalo:** detección por Z-score sobre el histórico de importes.
+3. **Duplicados:** comprobación de expedientes previos del mismo cliente.
+4. **Coherencia documental:** validación de consistencia entre el tipo de siniestro y los documentos aportados.
+
+El resultado del Agente G incluye un `verdict` (`CLEAR` o `FLAGGED`), un `risk_score` numérico entre 0 y 1, y el indicador `is_flagged`. Si el expediente es marcado, el orquestador termina el flujo con `RECHAZO_FRAUDE` sin invocar a los agentes B, C, D ni E.
+
+### 7.4 Cobertura RAG (Agente D)
+
+Cuando `SCA_RAG_ENABLED=1`, el campo `coverage_result` de la respuesta incluye:
+
+- `source: "rag"` — indica que la cobertura se determinó mediante recuperación vectorial sobre ChromaDB.
+- `policy_section` — identificador de la sección de póliza recuperada.
+- `retrieved_snippet` — fragmento de texto del documento de póliza de Seguros Pepín.
+
+Sin RAG, `source` es `"mock"` y la cobertura se determina por el catálogo determinista.
+
+### 7.5 Extracción multimodal (Agente C · Claude Vision)
+
+Cuando se suben documentos reales y `ANTHROPIC_API_KEY` está configurada, el campo `extraction_result` incluye:
+
+- `source: "claude_vision"` — indica extracción real por LLM.
+- `by_document` — diccionario con una entrada por fichero subido, con los campos:
+  - `doc_type` — tipo de documento identificado por Claude.
+  - `amount` — importe leído del documento.
+  - `date` — fecha leída del documento.
+  - `confidence` — nivel de confianza entre 0 y 1.
+  - `summary` — resumen textual del contenido del documento.
+
+> El importe de la decisión final es siempre el introducido en el formulario; la extracción multimodal se presenta como información complementaria para el agente resolutor y el operador humano.
+
+### 7.6 Chain of Thought (`reasoning_trace` / `decisions_log`)
+
+La cadena de razonamiento se presenta como una timeline con una tarjeta por agente. Permite al evaluador:
 
 - Verificar qué agentes intervinieron y en qué orden.
-- Comprobar si el razonamiento proviene del LLM (texto más elaborado, con formato Markdown) o del fallback determinista (texto más esquemático).
-- Detectar el motivo exacto de un rechazo, una solicitud de información o una derivación a HITL.
+- Comprobar si el razonamiento proviene del LLM (texto elaborado, con Markdown) o del fallback determinista (texto esquemático).
+- Identificar el motivo exacto de un rechazo, una solicitud de información o una derivación a HITL.
 
-Para consultar la traza completa de un expediente persistido, el endpoint `/api/v1/claims/{id}/trace` la devuelve formateada como lista de decisiones con su marca temporal y nivel de confianza.
+La traza de un expediente persistido en BD puede consultarse también vía `GET /api/v1/claims/{id}/trace`.
+
+---
 
 ## 8. Inspección de la base de datos con Adminer
 
@@ -506,14 +647,14 @@ Con el sistema Docker levantado, abrir en el navegador:
 http://localhost:8082
 ```
 
-Adminer es una herramienta web ligera de administración de bases de datos (Vrána, 2024). En la pantalla de inicio, introducir los siguientes datos de conexión:
+Introducir los siguientes datos de conexión:
 
 | Campo | Valor |
 |---|---|
 | Sistema | MariaDB |
 | Servidor | `mariadb` |
 | Usuario | `claims_user` |
-| Contraseña | `claims_dev` (o el valor configurado en `.env`) |
+| Contraseña | `claims_s3cret_dev` (o el valor configurado en `.env`) |
 | Base de datos | `smart_claims` |
 
 ### 8.2 Tablas del esquema
@@ -522,13 +663,13 @@ La base de datos `smart_claims` contiene tres tablas:
 
 | Tabla | Descripción |
 |---|---|
-| `claims` | Un registro por expediente procesado. Columnas principales: `id`, `client_id`, `claim_type`, `channel`, `status`, `amount_requested`, `amount_approved`, `created_at`. |
+| `claims` | Un registro por expediente. Columnas principales: `id`, `client_id`, `claim_type`, `channel`, `status`, `amount_requested`, `amount_approved`, `created_at`. |
 | `agent_decisions` | Una fila por decisión de cada agente. Columnas: `claim_id` (FK), `agent`, `action`, `reasoning` (texto completo del CoT), `confidence`, `hitl_required`, `created_at`. |
-| `hitl_feedback` | Tabla preparada para el feedback del operador humano en casos HITL. Columnas: `claim_id`, `decision_id` (FK), `reviewer`, `original_action`, `final_action`, `override_reason`. Vacía en el MVP actual; se alimentará en la siguiente fase. |
+| `hitl_feedback` | Preparada para registrar el feedback del operador humano en casos HITL. Columnas: `claim_id`, `decision_id` (FK), `reviewer`, `original_action`, `final_action`, `override_reason`. En el MVP actual está vacía; se alimentará en fases posteriores. |
 
-### 8.3 Consultar la traza de decisiones de un expediente
+### 8.3 Consultas SQL útiles
 
-Para ver el ciclo completo de un expediente, ejecutar la siguiente consulta SQL desde la opción **Ejecutar SQL** de Adminer:
+**Traza completa de decisiones de un expediente:**
 
 ```sql
 SELECT
@@ -543,9 +684,7 @@ WHERE ad.claim_id = 'CLM-PAGO-01'
 ORDER BY ad.id ASC;
 ```
 
-El resultado muestra la secuencia cronológica de todos los agentes que intervinieron, con su razonamiento completo y si cada uno de ellos marcó el paso como requirente de revisión humana.
-
-Para ver el estado final del expediente:
+**Estado final de un expediente:**
 
 ```sql
 SELECT id, claim_type, status, amount_requested, amount_approved, created_at
@@ -553,84 +692,123 @@ FROM claims
 WHERE id = 'CLM-PAGO-01';
 ```
 
+**Resumen de expedientes por estado:**
+
+```sql
+SELECT status, COUNT(*) AS total
+FROM claims
+GROUP BY status
+ORDER BY total DESC;
+```
+
+---
+
 ## 9. Resolución de problemas frecuentes
 
-### 9.1 Sin `ANTHROPIC_API_KEY` — el sistema usa el fallback
+### 9.1 Sin `ANTHROPIC_API_KEY` — el sistema usa el fallback determinista
 
-**Síntoma:** el razonamiento en `reasoning_trace` es breve y esquemático (p. ej., `"Agente E: cobertura confirmada y 2900.00 EUR dentro del umbral; PAGO aprobado."`).
+**Síntoma:** el razonamiento en `reasoning_trace` es breve y esquemático. En la barra lateral de la app Streamlit aparece el indicador `Modo fallback determinista (sin clave)`.
 
-**Causa:** la variable `ANTHROPIC_API_KEY` no está configurada o es inválida. El módulo `reasoning.py` cae al texto de fallback predefinido.
+**Causa:** la variable `ANTHROPIC_API_KEY` no está configurada o es inválida.
 
-**Solución:** si se desea el razonamiento enriquecido con el LLM, añadir una clave válida de Anthropic en `.env` y reiniciar los contenedores:
+**Solución:** añadir una clave válida de Anthropic en `.env` y reiniciar:
 
 ```bash
 docker compose restart backend
 ```
 
-El comportamiento de la demo es correcto en cualquier caso; el fallback es un comportamiento esperado del diseño.
+O, en la app Streamlit local, añadir la clave en `.env` antes de lanzar `streamlit run`. En Streamlit Cloud, añadir la clave en la sección *Secrets* del panel de administración (clave `ANTHROPIC_API_KEY`).
+
+El comportamiento de la demo es correcto en cualquier caso; el fallback es un comportamiento previsto del diseño.
 
 ### 9.2 Sin MariaDB — la CLI muestra un aviso pero continúa
 
-**Síntoma al usar la CLI:** aparece en los logs una línea similar a:
+**Síntoma (CLI):** aparece una línea de log similar a:
 
 ```
 WARNING root: No se han podido persistir las decisiones de DEMO-PAGO: ...
 ```
 
-**Causa:** la CLI de demostración se ejecuta sin el servicio MariaDB levantado. `process_claim` captura la excepción de conexión en un bloque `try/except` y continúa el flujo.
+**Causa:** la CLI se ejecuta sin el servicio MariaDB levantado. `process_claim` captura la excepción en un bloque `try/except` y continúa el flujo sin interrupciones.
 
-**Solución:** este comportamiento es intencional y documentado en el diseño del MVP. Para persistencia completa, usar el despliegue Docker (§4).
+**Solución:** este comportamiento es intencional. Para persistencia completa, usar el despliegue Docker (§4).
 
-### 9.3 Puerto ocupado al arrancar Docker
+### 9.3 Sin ChromaDB — el Agente D usa el catálogo determinista
 
-**Síntoma:** error al ejecutar `docker compose up -d`, similar a:
+**Síntoma:** en el resultado, `coverage_result.source` es `"mock"` en lugar de `"rag"`, aunque `SCA_RAG_ENABLED=1`.
+
+**Causa:** ChromaDB no está disponible o la colección de pólizas no está indexada. El Agente D cae automáticamente al catálogo determinista.
+
+**Solución:** en el despliegue Docker, verificar que el contenedor `sca-chromadb` está en estado `running`:
+
+```bash
+docker compose ps chromadb
+```
+
+Si el contenedor está parado, reiniciarlo:
+
+```bash
+docker compose start chromadb
+```
+
+### 9.4 Puerto ocupado al arrancar Docker
+
+**Síntoma:** error al ejecutar `docker compose up -d`:
 
 ```
 Error response from daemon: Ports are not available: exposing port TCP 0.0.0.0:8000 -> ...
 ```
 
-**Causa:** alguno de los puertos requeridos (8000, 8080, 8082, 8501, 3306) está en uso por otro proceso en el host.
+**Causa:** uno de los puertos requeridos (8000, 8080, 8082, 8501 o 3306) está en uso.
 
-**Solución:** identificar y detener el proceso que ocupa el puerto. En Windows:
+**Solución en Windows:**
 
 ```powershell
 netstat -ano | findstr :8000
 taskkill /PID <PID> /F
 ```
 
-Alternativamente, modificar el mapeo de puertos en `docker-compose.yml` (columna izquierda del par `host:contenedor`).
+Alternativamente, cambiar el mapeo de puertos en `docker-compose.yml` (columna izquierda del par `host:contenedor`).
 
-### 9.4 El backend no arranca (`sca-backend` en estado `restarting`)
+### 9.5 El backend no arranca (`sca-backend` en estado `restarting`)
 
-**Causa más frecuente:** MariaDB no ha completado su inicialización antes de que el backend intente conectarse.
+**Causa más frecuente:** MariaDB no ha completado su inicialización cuando el backend intenta conectarse. El `docker-compose.yml` ya define la condición `service_healthy` para el healthcheck de MariaDB, pero en equipos lentos puede necesitar más tiempo.
 
-**Solución:** esperar entre 30 y 60 segundos y verificar de nuevo:
+**Solución:** esperar entre 30 y 60 segundos y verificar:
 
 ```bash
 docker compose ps
 docker compose logs backend --tail=30
 ```
 
-Si el problema persiste, verificar que las variables `DB_*` en `.env` son consistentes con las definidas en el bloque `mariadb` de `docker-compose.yml`.
+Si el problema persiste, comprobar que los valores `DB_*` en `.env` coinciden con los definidos en el bloque `mariadb` de `docker-compose.yml`.
 
-### 9.5 Error `404 Not Found` en `GET /api/v1/claims/{id}`
+### 9.6 Error `404 Not Found` al consultar `GET /api/v1/claims/{id}`
 
-**Causa:** el expediente con ese identificador no existe en la base de datos. Los expedientes solo se persisten si el sistema Docker está levantado y la conexión a MariaDB es correcta. La CLI de demostración no persiste resultados si MariaDB no está disponible.
+**Causa:** el expediente no existe en la base de datos. Esto ocurre cuando se usa la CLI sin MariaDB disponible, o cuando el `claim_id` de la consulta no coincide con el que usó `process_claim`.
 
-**Solución:** enviar primero el expediente mediante `POST /api/v1/claims/` con el sistema Docker activo, y consultar inmediatamente después con el mismo `claim_id`.
+**Solución:** enviar primero el expediente con `POST /api/v1/claims/` con el sistema Docker activo, y consultar inmediatamente después con el mismo `claim_id`.
 
-### 9.6 Mensaje `RuntimeError: Event loop is closed` al ejecutar la CLI
+### 9.7 El Agente G detecta fraude en un expediente legítimo de prueba
 
-**Síntoma:** la CLI termina con un *traceback* del tipo:
+**Causa:** el mock de `check_fraud` incluye un componente aleatorio que, sin semilla fija, puede producir un `risk_score` elevado de forma inesperada.
+
+**Solución para reproducibilidad:** usar la CLI de demostración (§6.1), que aplica `random.seed(7)` antes de cada caso, garantizando resultados consistentes entre ejecuciones.
+
+### 9.8 `RuntimeError: Event loop is closed` al terminar la CLI
+
+**Síntoma:** la CLI termina con un traceback cosmético:
 
 ```
 Exception ignored in: <function Connection.__del__ ...>
 RuntimeError: Event loop is closed
 ```
 
-**Causa:** el driver `aiomysql` intenta cerrar sus conexiones después de que el bucle asíncrono ya se ha cerrado. Es un aviso cosmético que no afecta al resultado del flujo.
+**Causa:** el driver `aiomysql` intenta cerrar sus conexiones después de que el bucle asíncrono se ha cerrado. No afecta al resultado del flujo; es un aviso puramente cosmético.
 
-**Solución:** se puede ignorar, o bien añadir un `await engine.dispose()` al final de `main()` en `run_demo.py` para liberar las conexiones de forma ordenada antes del cierre del bucle.
+**Solución:** ignorar el aviso. El script `run_demo.py` ya incluye `await engine.dispose()` al final de `main()` para minimizar este comportamiento.
+
+---
 
 ## 10. Referencias
 
