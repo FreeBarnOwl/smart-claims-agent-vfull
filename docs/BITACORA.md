@@ -92,3 +92,16 @@ Capítulo 04 nuevo, con los resultados completos de la evaluación sobre el data
 **Sobre la reproducibilidad de los mocks.** Fijar la semilla aleatoria del mock antifraude (`random.seed(7)`) ha sido necesario para que la evaluación sea reproducible. En producción, donde el detector de fraude consulta datos reales, esta dependencia desaparece.
 
 **Sobre la coordinación entre miembros del equipo.** La gestión de dos ramas paralelas del proyecto, cada una con decisiones de diseño diferentes, ha sido el principal reto organizativo. La consolidación final (rama `solucion_final`) ha integrado las mejores prácticas de ambas ramas, evitando la pérdida de trabajo.
+
+## Fase 6 — Motor antifraude y consolidación en main (junio 2026)
+
+**Hito 6.1 — Motor antifraude de 4 detectores.**
+Se sustituye el mock aleatorio de `check_fraud` por un motor determinista real (`backend/app/tools/fraud_tools.py`) con cuatro detectores: cribado OFAC mediante *fuzzy matching* (`difflib.SequenceMatcher`, umbral 0,82), detección de importe anómalo por Z-score (umbral 2,0), reclamaciones duplicadas y coherencia documental. El score compuesto produce un veredicto graduado: `BLOCKED` / `HIGH_RISK` (≥0,55) / `MEDIUM_RISK` (≥0,25) / `CLEAR`. Se añaden 15 tests en `test_fraud_tools.py`.
+
+**Hito 6.2 — Actualización del recuento de tests.**
+Con el motor antifraude, la suite pasa de 25 a **42 tests** (6 ficheros), todos en verde sobre SQLite en memoria. Se corrige el recuento en el capítulo 04 de la memoria, en `MEMORY.md` y aquí.
+
+**Hito 6.3 — Consolidación oficial en `main`.**
+La rama `solucion_final` (tag `v1.0.0-entrega2`) se fusiona a `main` por *fast-forward*; `main` queda como fuente de verdad. Se cierra el PR #1 (rama `feature/prototipo-e2e-entrega2`), ya incorporado en la consolidación.
+
+> **PENDIENTE para el equipo (importante):** el capítulo §4.4–4.6 (evaluación, 96,7 %) y las menciones al *"mock aleatorio de fraude / seed(7)"* (Hitos 4.3–4.4) se midieron **antes** del motor antifraude del Hito 6.1. Como el Agente G ya no usa un score aleatorio sino los 4 detectores deterministas, conviene **re-ejecutar `scripts/evaluate_dataset.py`** y actualizar §4.4–4.6 con los resultados reales del nuevo motor.

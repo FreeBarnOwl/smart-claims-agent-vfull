@@ -101,18 +101,19 @@ La diagonal principal concentra los 29 aciertos. El único punto fuera de la dia
 
 ## 4.7 Validación adicional: tests automatizados
 
-Además de la evaluación sobre el dataset sintético, el sistema dispone de una **suite de 25 tests automatizados** ejecutados con pytest, distribuidos en cinco ficheros:
+Además de la evaluación sobre el dataset sintético, el sistema dispone de una **suite de 42 tests automatizados** ejecutados con pytest, distribuidos en seis ficheros:
 
 | Fichero | Tests | Cobertura |
 |---|---|---|
-| `test_agents.py` | 10 | Validación unitaria de cada uno de los agentes especialistas (B, C, D, E, G) |
+| `test_agents.py` | 12 | Validación unitaria de cada uno de los agentes especialistas (B, C, D, E, G) |
+| `test_fraud_tools.py` | 15 | Motor antifraude: detectores OFAC (fuzzy matching), importe anómalo (Z-score), reclamaciones duplicadas y coherencia documental, más el cálculo del veredicto graduado |
 | `test_orchestration.py` | 5 | Flujo end-to-end de los cuatro caminos principales + verificación de acumuladores |
 | `test_repository.py` | 5 | Operaciones CRUD sobre la capa de persistencia |
 | `test_api.py` | 3 | Integración del endpoint REST con la lógica agéntica |
 | `test_reasoning.py` | 2 | Helper de razonamiento con LLM opcional y *fallback* |
-| **Total** | **25** | |
+| **Total** | **42** | |
 
-Los tests se ejecutan sobre una base de datos SQLite en memoria, sin necesidad de levantar MariaDB. La suite completa se ejecuta en menos de 5 segundos en un equipo de desarrollo estándar.
+Los tests se ejecutan sobre una base de datos SQLite en memoria, sin necesidad de levantar MariaDB. La suite completa se ejecuta en menos de un minuto en un equipo de desarrollo estándar.
 
 ## 4.8 Validación cualitativa: demostración CLI
 
@@ -136,7 +137,7 @@ Los resultados obtenidos permiten concluir que:
 - La **separación entre lógica determinista y razonamiento mediante LLM** se demuestra acertada: la decisión es estable y reproducible en todos los casos, mientras que el razonamiento natural enriquece la traza de auditoría sin comprometer la fiabilidad.
 - La **resiliencia del sistema** queda validada: la evaluación se ejecuta sin LLM externo y sin red, y los tests automatizados se ejecutan sin MariaDB, lo que confirma que la demostración funciona aunque falten dependencias opcionales.
 
-Estos resultados son congruentes con los objetivos del MVP enunciados en el capítulo 1: reproducibilidad, trazabilidad y resiliencia. La evaluación cuantitativa sobre el dataset sintético es coherente con la validación cualitativa de la CLI y con la cobertura de los 25 tests automatizados, lo que da una **triple garantía de la corrección funcional** del prototipo.
+Estos resultados son congruentes con los objetivos del MVP enunciados en el capítulo 1: reproducibilidad, trazabilidad y resiliencia. La evaluación cuantitativa sobre el dataset sintético es coherente con la validación cualitativa de la CLI y con la cobertura de los 42 tests automatizados, lo que da una **triple garantía de la corrección funcional** del prototipo.
 
 ## 4.10 Limitaciones y trabajo futuro de evaluación
 

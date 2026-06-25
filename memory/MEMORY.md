@@ -6,7 +6,7 @@ Notas de contexto persistente para el equipo técnico del TFM. Este fichero reco
 
 - **Rama activa:** `solucion_final` en el repositorio `smart-claims-agent-vfull`.
 - **Versión consolidada:** `v0.6.0-consolidated`.
-- **Tests automatizados:** 25/25 pasando sobre SQLite en memoria.
+- **Tests automatizados:** 42/42 pasando sobre SQLite en memoria (incluye 15 del motor antifraude `fraud_tools.py`).
 - **Evaluación funcional:** precisión global del 96,7 % sobre 30 casos sintéticos.
 - **Despliegue:** 5 servicios Docker operativos (`sca-backend`, `sca-frontend`, `sca-mariadb`, `sca-chromadb`, `sca-adminer`).
 - **CLI de demostración:** 4 escenarios validados (`DEMO-PAGO`, `DEMO-HITL`, `DEMO-RECHAZO`, `DEMO-INFO`).
