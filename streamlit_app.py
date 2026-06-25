@@ -102,6 +102,10 @@ DEMO_SCENARIOS = [
     {"label": "Rechazo por no cobertura", "claim_type": "danys_mecanics", "amount": 1500.0,
      "docs": ["informe_taller", "factura"],
      "desc": "Daños mecánicos · sin cobertura en póliza → RECHAZO"},
+    {"label": "Bloqueo por fraude (OFAC)", "claim_type": "danys_propis", "amount": 2500.0,
+     "docs": ["foto_danys", "factura", "denuncia_companyia"],
+     "client_name": "Viktor Nikolaev Kozlov",
+     "desc": "Asegurado en la lista de sanciones (OFAC/SDN) · documentación completa → RECHAZO_FRAUDE"},
 ]
 
 
@@ -269,6 +273,36 @@ def read_uploads(files) -> list[dict]:
     return out
 
 
+def render_stepper(result: dict) -> None:
+    """Stepper horizontal del flujo A→B→C→G→D→E. Verde = el agente intervino;
+    borde resaltado = último agente que actuó (donde terminó el flujo); gris = no recorrido.
+    Se deduce de decisions_log (campo `agent`)."""
+    steps = [
+        ("A", "agent_a_orchestrator"), ("B", "agent_b_document_validator"),
+        ("C", "agent_c_multimodal_extractor"), ("G", "agent_g_fraud_compliance"),
+        ("D", "agent_d_coverage_checker"), ("E", "agent_e_claim_resolver"),
+    ]
+    logged = [d.get("agent") for d in (result.get("decisions_log") or [])]
+    visited = set(logged)
+    last = logged[-1] if logged else None
+    parts = []
+    for i, (letter, key) in enumerate(steps):
+        if key == last:
+            css = f"background:{C_PRIMARY};color:#fff;border:2px solid {C_PRIMARY_DARK};"
+        elif key in visited:
+            css = "background:#EAF5EC;color:#2E844A;border:1px solid #9BD0A8;"
+        else:
+            css = "background:#F1F1F1;color:#9A9A95;border:1px solid #DDDBDA;"
+        parts.append(
+            f'<span title="{AGENT_LABELS.get(key, letter)}" style="display:inline-flex;'
+            f'align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;'
+            f'font-weight:700;font-size:13px;{css}">{letter}</span>')
+        if i < len(steps) - 1:
+            parts.append(f'<span style="color:{C_TEXT_SOFT};margin:0 7px">→</span>')
+    st.markdown('<div style="display:flex;align-items:center;margin:4px 0 16px 0">'
+                + "".join(parts) + "</div>", unsafe_allow_html=True)
+
+
 def render_result(result: dict) -> None:
     amount_paid = (result.get("resolution") or {}).get("amount_paid")
     st.markdown(f"### Expediente {result.get('_claim_id', '')}")
@@ -276,6 +310,8 @@ def render_result(result: dict) -> None:
     reason_term = result.get("termination_reason")
     if reason_term:
         st.caption(reason_term)
+
+    render_stepper(result)
 
     c1, c2, c3, c4 = st.columns(4)
     c1.markdown(metric_card("Estado", result.get("status", "—")), unsafe_allow_html=True)
@@ -393,7 +429,7 @@ elif view == "nueva":
     st.markdown("## Nueva reclamación")
 
     st.markdown('<div class="sca-section">Escenarios rápidos</div>', unsafe_allow_html=True)
-    cols = st.columns(4)
+    cols = st.columns(5)
     for i, sc in enumerate(DEMO_SCENARIOS):
         with cols[i]:
             with st.container(border=True):
@@ -401,7 +437,8 @@ elif view == "nueva":
                 st.caption(sc["desc"])
                 if st.button("Procesar", key=f"sc_{i}", use_container_width=True):
                     process_and_store("CLIENT-DEMO", "cliente@segurospepin.com",
-                                      sc["claim_type"], sc["amount"], sc["docs"])
+                                      sc["claim_type"], sc["amount"], sc["docs"],
+                                      client_name=sc.get("client_name"))
 
     st.markdown('<div class="sca-section">O crea una reclamación personalizada</div>',
                 unsafe_allow_html=True)
@@ -466,10 +503,13 @@ Cada agente hace su trabajo y devuelve el control al supervisor.
     st.markdown('<div class="sca-section">Los seis agentes</div>', unsafe_allow_html=True)
     agents = [
         ("Agente A · Orquestador", "Supervisor central: triaje y enrutamiento del expediente."),
-        ("Agente G · Fraude y cumplimiento", "Filtro de entrada: motor antifraude con 4 detectores "
-         "(OFAC fuzzy, importe anómalo por Z-score, duplicados, coherencia documental) y veredicto graduado."),
         ("Agente B · Validación documental", "Comprueba la documentación requerida del expediente."),
         ("Agente C · Extracción multimodal", "Extrae datos de facturas/fotos/actas (VLM)."),
+        ("Agente G · Fraude y cumplimiento", "Se ejecuta tras la validación documental (B) y la extracción (C), "
+         "porque sus detectores de coherencia documental y de anomalía de importe necesitan los datos ya "
+         "extraídos; actúa como barrera de cumplimiento antes de la verificación de cobertura (D) y de cualquier "
+         "pago (E). Motor de 4 detectores: OFAC fuzzy, importe anómalo por Z-score, duplicados y coherencia "
+         "documental, con veredicto graduado."),
         ("Agente D · Verificación de cobertura", "Determina cobertura, límites y franquicia (RAG)."),
         ("Agente E · Resolución", "Decisión final: pago automático, rechazo o derivación a revisión humana."),
     ]
