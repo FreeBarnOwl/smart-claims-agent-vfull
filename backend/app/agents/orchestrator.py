@@ -101,11 +101,11 @@ def supervisor_router(state: dict) -> str:
 
     Orden de evaluacion:
     1.  Flujo terminado          → END
-    2.  Cribado fraude pendiente → fraud_compliance (Agente G)
-    3.  Cliente flagged          → END (caso bloqueado)
-    4.  Validacion pendiente     → document_validator (Agente B)
-    5.  Documentos incompletos   → END (cliente notificado)
-    6.  Extraccion pendiente     → multimodal_extractor (Agente C)
+    2.  Validacion pendiente     → document_validator (Agente B)
+    3.  Documentos incompletos   → END (cliente notificado)
+    4.  Extraccion pendiente     → multimodal_extractor (Agente C)
+    5.  Cribado fraude pendiente → fraud_compliance (Agente G)
+    6.  Cliente flagged          → END (caso bloqueado)
     7.  Cobertura pendiente      → coverage_checker (Agente D)
     8.  Resolucion pendiente     → claim_resolver (Agente E)
     9.  Todo completo            → END
