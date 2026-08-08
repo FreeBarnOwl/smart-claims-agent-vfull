@@ -86,3 +86,32 @@ def test_bandeja_view_shows_fixture_cases_and_processes_pago_automatico():
     assert not at.exception
     result_text = " ".join(str(el.value) for el in at.markdown)
     assert "Pago aprobado" in result_text
+
+
+def test_conciliacion_view_shows_fixture_recommendations():
+    """Vista 'Conciliación (Agente F)': demostrador secundario e
+    independiente del flujo principal. Debe mostrar los 3 casos DPA/RC de
+    demo, cada uno con la recomendación real que produce
+    advise_conciliation() (no texto estático)."""
+    os.environ.pop("ANTHROPIC_API_KEY", None)
+
+    at = AppTest.from_file(STREAMLIT_APP_PATH, default_timeout=30)
+    at.run()
+    at.session_state["view"] = "conciliacion"
+    at.run()
+
+    assert not at.exception
+
+    all_text = " ".join(str(el.value) for el in (*at.markdown, *at.caption))
+    assert "CLM-CONC-0001" in all_text
+    assert "CLM-CONC-0002" in all_text
+    assert "CLM-CONC-0003" in all_text
+
+    # Caso 1 (stage 1 rechazada) -> recomienda subir de tramo.
+    assert "siguiente tramo" in all_text.lower()
+    # Caso 2 (40 dias sin respuesta) -> alerta de abandono.
+    assert "riesgo de cierre por abandono" in all_text
+    # Caso 3 (RC, cobertura insuficiente) -> alerta de escalada judicial.
+    assert "riesgo de escalada judicial" in all_text
+    # F nunca ejecuta: cada recomendacion deja claro que la ejecuta un humano.
+    assert "la ejecuta un gestor humano" in all_text

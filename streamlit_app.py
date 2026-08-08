@@ -44,7 +44,9 @@ except Exception:
     pass
 
 from app.agents.orchestrator import process_claim  # noqa: E402
+from app.agents.conciliation_advisor import advise_conciliation  # noqa: E402
 from streamlit_fixtures import BANDEJA_CASES, bandeja_uploaded_files  # noqa: E402
+from streamlit_conciliation_fixtures import CONCILIACION_CASES  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +71,14 @@ AGENT_LABELS = {
     "agent_d_coverage_checker":     "Agente D · Verificación de cobertura",
     "agent_e_claim_resolver":       "Agente E · Resolución",
     "agent_g_fraud_compliance":     "Agente G · Fraude y cumplimiento",
+    "agent_f_conciliation_advisor": "Agente F · Asistente de conciliación",
+}
+
+NEGOTIATION_STAGE_LABELS = {
+    0: "Sin oferta formulada",
+    1: "Oferta al 65% ya hecha",
+    2: "Oferta al 75% ya hecha",
+    3: "Oferta al 90% ya hecha",
 }
 
 CLAIM_TYPES = {
@@ -383,6 +393,8 @@ with st.sidebar:
     st.button("Inicio",              key="nav_home",  use_container_width=True, on_click=go, args=("home",))
     st.button("Bandeja",             key="nav_bandeja", use_container_width=True, on_click=go, args=("bandeja",))
     st.button("Nueva reclamación",   key="nav_nueva", use_container_width=True, on_click=go, args=("nueva",))
+    st.button("Conciliación (Agente F)", key="nav_conciliacion", use_container_width=True,
+              on_click=go, args=("conciliacion",))
     st.button("Historial",           key="nav_hist",  use_container_width=True, on_click=go, args=("historial",))
     st.button("Arquitectura",        key="nav_arq",   use_container_width=True, on_click=go, args=("arquitectura",))
     st.divider()
@@ -557,6 +569,55 @@ elif view == "nueva":
     if st.session_state.get("last_result"):
         st.divider()
         render_result(st.session_state["last_result"])
+
+
+# ── Vista: CONCILIACION (Agente F, demostrador secundario) ─────────────────
+
+elif view == "conciliacion":
+    st.markdown("## Conciliación (Agente F)")
+    st.markdown(
+        "**Demostrador secundario**, independiente del flujo principal "
+        "A→B→C→G→D→E: el caso base de este prototipo (daños propios) no "
+        "tiene fase de negociación. Esta vista aplica el Agente F sobre "
+        "tres expedientes DPA/RC (daños propios / responsabilidad civil) "
+        "ya en proceso de conciliación con el cliente."
+    )
+    st.caption(
+        "El Agente F solo recomienda por reglas explicables (sin aprendizaje "
+        "automático): no ejecuta ninguna acción de negocio, no cambia "
+        "estados ni persiste decisiones. Cada recomendación la ejecuta un "
+        "gestor humano."
+    )
+    st.write("")
+
+    for fixture in CONCILIACION_CASES:
+        case = fixture["case"]
+        advice = advise_conciliation(case)
+
+        with st.container(border=True):
+            h1, h2, h3 = st.columns([1.3, 1.6, 1.1])
+            h1.markdown(f"**{fixture['id']}**")
+            h1.caption(fixture["situacion"])
+            h2.markdown(CLAIM_TYPES.get(case["claim_type"], case["claim_type"].upper()))
+            h2.caption(NEGOTIATION_STAGE_LABELS.get(case["negotiation_stage"], "—"))
+            h3.markdown(f"**{case['amount_claimed']:,.0f} €** reclamados")
+
+            priority_kind = {"alta": "error", "media": "warning", "baja": "neutral"}
+            st.markdown(pill(f"Prioridad {advice['priority']}",
+                              priority_kind.get(advice["priority"], "neutral")),
+                        unsafe_allow_html=True)
+
+            st.markdown(f"**Recomendación:** {advice['recommendation']}")
+            if advice.get("offer_amount") is not None:
+                st.markdown(f"**Importe de oferta sugerido:** {advice['offer_amount']:,.2f} €")
+
+            if advice["alerts"]:
+                for alert in advice["alerts"]:
+                    st.warning(alert)
+
+            with st.container(border=True):
+                st.markdown(f"**{AGENT_LABELS['agent_f_conciliation_advisor']}**")
+                st.markdown(advice["reasoning"])
 
 
 # ── Vista: HISTORIAL ───────────────────────────────────────────────────────
