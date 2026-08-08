@@ -10,6 +10,7 @@ Sistema agéntico de procesamiento multimodal y ejecución autónoma para la ges
 
 ## Tabla de contenidos
 
+0. [Guía rápida — 3 modos de ejecución](#0-guía-rápida--3-modos-de-ejecución)
 1. [Arquitectura del sistema](#1-arquitectura-del-sistema)
 2. [Stack tecnológico](#2-stack-tecnológico)
 3. [Estructura del repositorio](#3-estructura-del-repositorio)
@@ -27,6 +28,45 @@ Sistema agéntico de procesamiento multimodal y ejecución autónoma para la ges
 15. [Variables de entorno](#15-variables-de-entorno)
 16. [Decisiones de diseño](#16-decisiones-de-diseño)
 17. [Registro de cambios](#17-registro-de-cambios)
+
+---
+
+## 0. Guía rápida — 3 modos de ejecución
+
+El sistema puede ejecutarse de tres formas independientes. **`ANTHROPIC_API_KEY` es opcional
+en las tres**: si no está presente (o falla la llamada), `reason()` cae a un *fallback*
+determinista y el pipeline sigue produciendo decisiones — el núcleo de decisión (`status`,
+`decision`, `hitl_required`, `resolution`) nunca depende del LLM (ver [§16](#16-decisiones-de-diseño)).
+
+### Modo 1 — Docker Compose (stack completo: backend + frontend + MariaDB + ChromaDB)
+
+```bash
+cp .env.example .env      # ANTHROPIC_API_KEY puede dejarse vacía
+docker compose up -d --build
+```
+- Frontend: http://localhost:8501 · API: http://localhost:8000/docs
+
+### Modo 2 — Streamlit standalone (un solo proceso, sin Docker, sin BD externa)
+
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+No requiere `ANTHROPIC_API_KEY`, MariaDB ni ChromaDB externo (RAG embebido). El historial
+vive en memoria de sesión. Detalle de despliegue en la nube: [docs/DEPLOY-STREAMLIT.md](docs/DEPLOY-STREAMLIT.md).
+
+### Modo 3 — CLI in-process (evaluación por lotes, sin credenciales ni servicios externos)
+
+```bash
+cd backend
+pip install -r requirements.txt
+py scripts/evaluate_inprocess.py
+```
+Ejecuta los 32 casos del dataset sintético (pago automático, HITL, rechazo, información
+incompleta, fraude OFAC) invocando `process_claim` directamente — sin backend, sin Docker,
+sin `ANTHROPIC_API_KEY` y sin MariaDB/ChromaDB en marcha (la persistencia a BD se omite con
+un aviso si no hay servidor disponible, sin interrumpir el flujo). Verificado: 32/32
+decisiones producidas correctamente vía el *fallback* determinista.
 
 ---
 
@@ -233,7 +273,7 @@ cp .env.example .env
 Edita `.env` y rellena como mínimo:
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-api03-...   # Obligatorio
+ANTHROPIC_API_KEY=sk-ant-api03-...   # Opcional — sin ella, fallback determinista (ver §0)
 DB_ROOT_PASSWORD=root_dev             # Válido para dev
 DB_PASSWORD=claims_dev                # Válido para dev
 ```
