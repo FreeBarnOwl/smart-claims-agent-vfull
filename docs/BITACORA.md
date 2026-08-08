@@ -241,3 +241,56 @@ PAGO/RECHAZO/REVISION_HUMANA/INFO_REQUERIDA/RECHAZO_FRAUDE) con 32 casos (30 bas
 casos sancionados (`RECHAZO_FRAUDE`); cobertura por RAG real en el 68,8 % de los casos; TRA 50 %,
 HITL 25 %. El motor determinista elimina el falso positivo aleatorio del mock anterior (96,7 % →
 100 %). Se reescribe `04-evaluacion.md` con estas métricas.
+
+## Fase 12 — Agente F: de predicción de judicialización a asistente de conciliación (agosto 2026)
+
+**Hito 12.1 — Corrección de premisa.**
+En Entrega 1, el Agente F se justificaba como modelo de *machine learning* clásico para
+**predecir judicialización** sobre un supuesto de ~1.000 casos/año. El contraste con la Gerencia
+de Reclamaciones del cliente (2026-07-21) corrigió ese dato en dos órdenes de magnitud: la cifra
+real es **~10 expedientes/año** (0,08 % de 12.000 reclamaciones). Sin histórico suficiente para
+entrenar un modelo y sin volumen que lo justifique, la premisa original queda invalidada. El
+equipo decide (2026-08-08) tratar este hallazgo como fortaleza a presentar proactivamente ante el
+tribunal — "diagnosticamos desde el enunciado, contrastamos con el cliente real, el contraste
+invalidó una premisa central, así que rediseñamos" — en vez de ocultarlo.
+
+**Hito 12.2 — Rediseño: asistente de conciliación por reglas.**
+Se implementa `backend/app/agents/conciliation_advisor.py` (`agent_f_conciliation_advisor`):
+`advise_conciliation(case)`, función **pura y determinista** (sin ML) sobre expedientes DPA
+(daños propios) o RC (responsabilidad civil) ya en proceso de negociación. Reglas que quedaron:
+
+- **Tramo 0 (sin oferta)** → recomienda formular oferta inicial al **65 %** del importe reclamado.
+- **Tramo 1 o 2 rechazado** (`last_offer_rejected=True`) → recomienda subir al siguiente tramo:
+  65 %→75 %, 75 %→90 %.
+- **Tramo 1 o 2 sin respuesta aún** → recomienda esperar la respuesta del cliente a la oferta
+  vigente (no escala de tramo hasta que conste rechazo).
+- **Tramo 3 (90 %) rechazado** → el agente **no elige**: presenta al gestor humano las tres
+  salidas (transar una última vez, cierre por abandono, derivación a vía judicial externa) con
+  los datos del expediente.
+- **Alerta de abandono**: más de 30 días sin respuesta del cliente.
+- **Alerta de estancamiento**: más de 45 días en el tramo actual.
+- **Alerta de cobertura insuficiente**: solo en RC (`coverage_sufficient=False`) — la RC se
+  gestiona caso a caso, sin escala fija de tramos como DPA.
+- **Prioridad** (alta/media/baja): se deriva únicamente del número de alertas activas (0/1/≥2).
+
+**Frontera HITL:** F **nunca** ejecuta acciones de negocio, cambia estados ni persiste
+decisiones — cada texto de recomendación lo deja explícito
+(`HUMAN_EXECUTION_NOTE = "El Agente F solo recomienda: la ejecuta un gestor humano."`). El
+razonamiento en lenguaje natural usa el mismo `reason()` con *fallback* determinista que el resto
+de agentes; un test de determinismo (mismo patrón que `test_determinism.py`) demuestra que
+`recommendation`, `offer_amount`, `alerts` y `priority` no cambian aunque `reason()` devuelva
+contenido adversarial.
+
+**Hito 12.3 — Alcance: demostrador secundario, no se integra en el grafo.**
+El caso de uso principal del MVP (`danys_propis`) no tiene fase de negociación, así que F **no**
+se añade a `supervisor_router` ni al grafo `A→B→C→G→D→E` (que sigue intacto). Es un módulo
+independiente con su propia vista de demo (`streamlit_app.py`, "Conciliación (Agente F)"),
+sobre 3 fixtures DPA/RC (`streamlit_conciliation_fixtures.py`): oferta pendiente de subir tramo,
+riesgo de abandono, RC con cobertura insuficiente. Etiqueta oficial en `AGENT_LABELS`:
+**"Agente F · Asistente de conciliación"** — nunca "judicializador". La numeración no correlativa
+A-B-C-D-E-G-(F) se mantiene: F y H siguen reservadas para funcionalidad de fase posterior, con la
+salvedad de que F ya tiene un demostrador funcional en este prototipo.
+
+**Hito 12.4 — Verificación.** 22 tests nuevos en `test_conciliation_advisor.py` (una regla por
+tramo, bordes exactos de los umbrales de días, determinismo) + 1 test de UI
+(`test_streamlit_ui.py`). Suite completa: 99 tests, verde.
