@@ -23,6 +23,7 @@ flujo devuelve igualmente el resultado (resiliencia para la demo).
 from __future__ import annotations
 
 import logging
+import math
 
 from langgraph.graph import END, StateGraph
 
@@ -35,8 +36,74 @@ from app.agents.reasoning            import reason
 from app.agents.state                import ClaimState
 from app.db.models                   import ClaimStatus
 from app.db.repository               import log_agent_decision, save_claim
+from app.tools.claim_tools           import REQUIRED_DOCS_BY_TYPE
 
 logger = logging.getLogger(__name__)
+
+MAX_AMOUNT_REQUESTED  = 10_000_000
+MAX_CLIENT_NAME_LEN   = 200
+CLAIM_TYPE_CATALOG    = frozenset(REQUIRED_DOCS_BY_TYPE) - {"default"}
+
+
+# ── Validacion de entrada (blindaje A1) ───────────────────────────────────
+
+def validate_claim_input(claim_type, amount_requested, client_name, documents) -> dict:
+    """
+    Valida y normaliza los datos de entrada de un expediente ANTES de
+    iniciar el flujo de agentes.
+
+    Devuelve un dict:
+    - Si los datos son invalidos: {"valid": False, "decision", "status",
+      "hitl_required", "termination_reason"} — el expediente debe cortarse
+      de inmediato (terminate=True) sin invocar a ningun agente especialista.
+    - Si son validos: {"valid": True, "client_name" (normalizado),
+      "documents" (deduplicados, preservando el orden de aparicion)}.
+    """
+    # 1. Importe: numerico, finito, > 0 y < 10.000.000
+    if (
+        isinstance(amount_requested, bool)
+        or not isinstance(amount_requested, (int, float))
+        or not math.isfinite(amount_requested)
+        or amount_requested <= 0
+        or amount_requested >= MAX_AMOUNT_REQUESTED
+    ):
+        return {
+            "valid":              False,
+            "status":             ClaimStatus.REJECTED.value,
+            "decision":           "RECHAZO",
+            "hitl_required":      False,
+            "termination_reason": f"importe reclamado invalido: {amount_requested!r}",
+        }
+
+    # 2. Tipo de siniestro: debe pertenecer al catalogo conocido
+    if claim_type not in CLAIM_TYPE_CATALOG:
+        return {
+            "valid":              False,
+            "status":             ClaimStatus.PENDING_REVIEW.value,
+            "decision":           "REVISION_HUMANA",
+            "hitl_required":      True,
+            "termination_reason": f"tipo de siniestro no reconocido: {claim_type!r}",
+        }
+
+    # 3. Nombre del asegurado: no vacio, <= 200 caracteres, normalizado
+    normalized_name = (client_name or "").strip()
+    if not normalized_name or len(normalized_name) > MAX_CLIENT_NAME_LEN:
+        return {
+            "valid":              False,
+            "status":             ClaimStatus.PENDING_REVIEW.value,
+            "decision":           "REVISION_HUMANA",
+            "hitl_required":      True,
+            "termination_reason": "nombre del asegurado invalido (vacio o excesivamente largo)",
+        }
+
+    # 4. Documentos: deduplicar antes de que el Agente B cuente completitud
+    deduped_documents = list(dict.fromkeys(documents or []))
+
+    return {
+        "valid":       True,
+        "client_name": normalized_name,
+        "documents":   deduped_documents,
+    }
 
 
 # ── Nodo de triaje (entrada al grafo) ─────────────────────────────────────
@@ -46,11 +113,45 @@ async def triage_node(state: dict) -> dict:
     Agente A — triaje inicial del expediente.
 
     No decide enrutamiento (de eso se ocupa el supervisor); su rol es
-    enriquecer el estado con el razonamiento de bienvenida y dejar el
-    expediente listo para el primer agente especialista.
+    validar los datos de entrada, enriquecer el estado con el razonamiento
+    de bienvenida y dejar el expediente listo para el primer agente
+    especialista.
     """
     claim_id = state["claim_id"]
     logger.info("[Agente A — Orchestrator] Triaje iniciado — expediente %s", claim_id)
+
+    validation = validate_claim_input(
+        claim_type=state.get("claim_type"),
+        amount_requested=state.get("amount_requested"),
+        client_name=state.get("client_name"),
+        documents=state.get("documents"),
+    )
+
+    if not validation["valid"]:
+        logger.warning(
+            "[Agente A] Validacion de entrada fallida — expediente %s: %s",
+            claim_id, validation["termination_reason"],
+        )
+        reasoning = (
+            f"Agente A: el expediente {claim_id} no supera la validacion de "
+            f"entrada ({validation['termination_reason']}). Se corta el flujo "
+            f"sin invocar a los agentes especialistas."
+        )
+        return {
+            "status":             validation["status"],
+            "decision":           validation["decision"],
+            "hitl_required":      validation["hitl_required"],
+            "terminate":          True,
+            "termination_reason": validation["termination_reason"],
+            "reasoning_trace":    [reasoning],
+            "decisions_log":      [{
+                "agent":         "agent_a_orchestrator",
+                "action":        "validacion_entrada_fallida",
+                "reasoning":     reasoning,
+                "confidence":    None,
+                "hitl_required": validation["hitl_required"],
+            }],
+        }
 
     fallback = (
         f"Agente A: expediente {claim_id} de tipo '{state.get('claim_type')}' "
@@ -79,6 +180,8 @@ async def triage_node(state: dict) -> dict:
 
     return {
         "status":          ClaimStatus.OPEN.value,
+        "client_name":     validation["client_name"],
+        "documents":       validation["documents"],
         "reasoning_trace": [reasoning],
         "decisions_log":   [{
             "agent":         "agent_a_orchestrator",

@@ -130,6 +130,62 @@ async def test_process_claim_handles_internal_error_gracefully(test_db, monkeypa
 
 
 @pytest.mark.asyncio
+async def test_invalid_amount_is_rejected_without_calling_specialist_agents(test_db):
+    """Importe invalido (negativo) → RECHAZO inmediato en el triaje, sin
+    invocar a los agentes especialistas (blindaje A1)."""
+    random.seed(7)
+    result = await process_claim(
+        claim_id         = "CLM-BADAMOUNT",
+        client_id        = "C-BADAMOUNT",
+        claim_type       = "danys_propis",
+        amount_requested = -500.0,
+        documents        = FULL_DOCS,
+    )
+
+    assert result["status"]   == "rejected"
+    assert result["decision"] == "RECHAZO"
+    agents_invoked = [d["agent"] for d in result["decisions_log"]]
+    assert agents_invoked == ["agent_a_orchestrator"]
+
+
+@pytest.mark.asyncio
+async def test_unknown_claim_type_routes_to_human_review_without_specialists(test_db):
+    """Tipo de siniestro fuera de catalogo → REVISION_HUMANA inmediata en el
+    triaje, sin invocar a los agentes especialistas (blindaje A1)."""
+    random.seed(7)
+    result = await process_claim(
+        claim_id         = "CLM-BADTYPE",
+        client_id        = "C-BADTYPE",
+        claim_type       = "tipo_inventado",
+        amount_requested = 1000.0,
+        documents        = FULL_DOCS,
+    )
+
+    assert result["status"]        == "pending_review"
+    assert result["decision"]      == "REVISION_HUMANA"
+    assert result["hitl_required"] is True
+    agents_invoked = [d["agent"] for d in result["decisions_log"]]
+    assert agents_invoked == ["agent_a_orchestrator"]
+
+
+@pytest.mark.asyncio
+async def test_duplicate_documents_are_deduplicated_before_validation(test_db):
+    """Documentos duplicados no deben contarse dos veces: tras deduplicar
+    siguen faltando documentos reales (blindaje A1)."""
+    random.seed(7)
+    result = await process_claim(
+        claim_id         = "CLM-DUPDOCS",
+        client_id        = "C-DUPDOCS",
+        claim_type       = "danys_propis",
+        amount_requested = 2500.0,
+        documents        = ["foto_danys", "foto_danys", "foto_danys"],
+    )
+
+    assert result["validation_result"]["is_valid"] is False
+    assert result["validation_result"]["provided_docs"] == ["foto_danys"]
+
+
+@pytest.mark.asyncio
 async def test_decisions_log_accumulates(test_db):
     """El decisions_log debe contener una entrada por agente invocado."""
     random.seed(7)
