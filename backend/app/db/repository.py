@@ -9,6 +9,17 @@ flujo desde process_claim.
 Acceder a AsyncSessionLocal a través del atributo del módulo
 (db_session.AsyncSessionLocal) permite que los tests sustituyan la sesión
 por una de SQLite en memoria sin tocar el código de producción.
+
+LIMITACION CONOCIDA (ver blindaje A2): save_claim() y cada llamada a
+log_agent_decision() abren su propia sesión y hacen commit() de forma
+independiente; no comparten una transaccion. Si process_claim() pierde
+la conexion a mitad de la persistencia (p. ej. tras guardar el claim
+pero durante el bucle de decisions_log), las escrituras ya comiteadas
+quedan persistidas y las restantes se pierden — no hay rollback
+conjunto. Mitigacion propuesta para produccion: envolver save_claim()
+y el bucle de log_agent_decision() en una unica sesion/transaccion
+(un solo `async with AsyncSessionLocal() as s: ... await s.commit()`)
+para que la persistencia de un expediente sea atomica.
 """
 from __future__ import annotations
 
