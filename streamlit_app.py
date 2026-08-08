@@ -20,9 +20,10 @@ import uuid
 import pandas as pd
 import streamlit as st
 
-# ── Acceso al paquete backend (app.*) ─────────────────────────────────────
+# ── Acceso al paquete backend (app.*) y a los módulos del propio repo ─────
 _ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_ROOT, "backend"))
+sys.path.insert(0, _ROOT)
 
 try:
     if "ANTHROPIC_API_KEY" in st.secrets:
@@ -43,6 +44,7 @@ except Exception:
     pass
 
 from app.agents.orchestrator import process_claim  # noqa: E402
+from streamlit_fixtures import BANDEJA_CASES, bandeja_uploaded_files  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -379,6 +381,7 @@ with st.sidebar:
                 f'text-transform:uppercase;letter-spacing:.6px;margin:4px 0 10px">Navegación</div>',
                 unsafe_allow_html=True)
     st.button("Inicio",              key="nav_home",  use_container_width=True, on_click=go, args=("home",))
+    st.button("Bandeja",             key="nav_bandeja", use_container_width=True, on_click=go, args=("bandeja",))
     st.button("Nueva reclamación",   key="nav_nueva", use_container_width=True, on_click=go, args=("nueva",))
     st.button("Historial",           key="nav_hist",  use_container_width=True, on_click=go, args=("historial",))
     st.button("Arquitectura",        key="nav_arq",   use_container_width=True, on_click=go, args=("arquitectura",))
@@ -429,6 +432,77 @@ if view == "home":
                      "y el motor antifraude de cuatro detectores.")
             st.button("Ver arquitectura", key="tile_arq", use_container_width=True,
                       on_click=go, args=("arquitectura",))
+
+
+# ── Vista: BANDEJA (ingesta multicanal simulada) ───────────────────────────
+
+elif view == "bandeja":
+    st.markdown("## Bandeja de entrada")
+    st.markdown("Casos recibidos por canales conectados a la aseguradora (aquí, "
+                "WhatsApp mediante un conector simulado). El gestor comprueba que "
+                "la documentación esté completa antes de disparar el procesado.")
+    st.write("")
+
+    for case in BANDEJA_CASES:
+        with st.container(border=True):
+            h1, h2, h3, h4 = st.columns([1.4, 1.6, 1.3, 1.1])
+            h1.markdown(f"**{case['id']}**")
+            h1.caption(case["origin"])
+            h2.markdown(f"**{case['client_name']}**")
+            h2.caption(f"Entrada: {case['entry_date']}")
+            h3.markdown(CLAIM_TYPES.get(case["claim_type"], case["claim_type"]))
+            h4.markdown(f"**{case['amount']:,.0f} €**")
+
+            with st.chat_message("user"):
+                st.write(case["whatsapp_message"])
+
+            st.markdown("**Adjuntos recibidos**")
+            att_cols = st.columns(len(case["attachments"]) or 1)
+            for col, att in zip(att_cols, case["attachments"]):
+                with col:
+                    if att["kind"] == "image":
+                        st.image(att["path"], caption=att["label"], use_container_width=True)
+                    else:
+                        # PDF: la factura es el adjunto que el Agente C lee de
+                        # verdad, así que se ve como miniatura (1a página), no
+                        # solo como icono + nombre.
+                        if att.get("preview_path"):
+                            st.image(att["preview_path"], caption=att["label"],
+                                     use_container_width=True)
+                        else:
+                            st.markdown(f"📄 **{att['label']}**")
+                        st.caption(att["file"])
+                        with open(att["path"], "rb") as fh:
+                            st.download_button(
+                                "Descargar PDF", data=fh.read(), file_name=att["file"],
+                                mime=att["media_type"],
+                                key=f"bandeja_dl_{case['id']}_{att['file']}",
+                                use_container_width=True,
+                            )
+
+            required = REQUIRED_DOCS_BY_TYPE.get(case["claim_type"], [])
+            missing = [d for d in required if d not in case["documents"]]
+            if missing:
+                st.warning(f"Documentación incompleta: falta(n) {', '.join(missing)}.")
+            else:
+                st.success("Documentación completa para este tipo de siniestro.")
+
+            if st.button("Revisar y procesar", key=f"bandeja_process_{case['id']}",
+                         use_container_width=True):
+                process_and_store(
+                    case["client_id"], case["client_email"], case["claim_type"],
+                    case["amount"], case["documents"], client_name=case["client_name"],
+                    uploaded=bandeja_uploaded_files(case),
+                )
+                st.session_state["bandeja_last_case_id"] = case["id"]
+
+            # El resultado se muestra dentro de la propia tarjeta del caso
+            # procesado (no debajo de todas), para que la narración de la
+            # demo quede junto al ticket que la originó.
+            if (st.session_state.get("last_result")
+                    and st.session_state.get("bandeja_last_case_id") == case["id"]):
+                st.divider()
+                render_result(st.session_state["last_result"])
 
 
 # ── Vista: NUEVA RECLAMACION ───────────────────────────────────────────────
