@@ -34,3 +34,26 @@ def test_reason_falls_back_on_exception(monkeypatch):
     )
     # En entorno de tests sin red real, el fallback se activara
     assert out == "FALLBACK_POR_ERROR" or isinstance(out, str)
+
+
+def test_reason_configures_llm_timeout(monkeypatch):
+    """El cliente LLM debe configurarse con timeout (blindaje A4): una
+    llamada colgada (p. ej. wifi caido durante la defensa) debe caer al
+    fallback en ~20s, no bloquear indefinidamente."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "fake-key")
+    captured = {}
+
+    class _FakeChatAnthropic:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def invoke(self, messages):
+            raise RuntimeError("no deberia llegar aqui en este test")
+
+    import langchain_anthropic
+    monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", _FakeChatAnthropic)
+
+    out = reason(system="sys", prompt="prompt", fallback="FALLBACK_TIMEOUT")
+
+    assert out == "FALLBACK_TIMEOUT"
+    assert captured.get("timeout") == 20

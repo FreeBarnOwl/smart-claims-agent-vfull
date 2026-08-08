@@ -77,6 +77,7 @@ def analyze_document(data: bytes, media_type: str, filename: str = "") -> dict |
         response = client.messages.create(
             model=MODEL,
             max_tokens=1024,
+            timeout=20,
             messages=[{
                 "role": "user",
                 "content": [_media_block(data, media_type), {"type": "text", "text": _PROMPT}],

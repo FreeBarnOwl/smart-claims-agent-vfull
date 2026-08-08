@@ -41,7 +41,7 @@ def reason(system: str, prompt: str, fallback: str) -> str:
     try:
         from langchain_anthropic import ChatAnthropic
 
-        llm = ChatAnthropic(model=MODEL, max_tokens=1024, temperature=0)
+        llm = ChatAnthropic(model=MODEL, max_tokens=1024, temperature=0, timeout=20)
         response = llm.invoke([
             {"role": "system", "content": system},
             {"role": "user",   "content": prompt},
