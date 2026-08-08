@@ -5,6 +5,7 @@ hay ANTHROPIC_API_KEY disponible.
 """
 import os
 
+import httpx
 import pytest
 
 from app.agents.reasoning import reason
@@ -57,3 +58,28 @@ def test_reason_configures_llm_timeout(monkeypatch):
 
     assert out == "FALLBACK_TIMEOUT"
     assert captured.get("timeout") == 20
+
+
+def test_reason_falls_back_on_real_api_timeout_error(monkeypatch):
+    """Blindaje A4 (realista): si la llamada agota el timeout, el SDK de
+    Anthropic lanza `anthropic.APITimeoutError` (no un RuntimeError
+    generico). reason() debe capturar esta excepcion real y caer al
+    fallback, igual que ante cualquier otro fallo de red."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "fake-key")
+
+    import anthropic
+
+    class _FakeChatAnthropic:
+        def __init__(self, **kwargs):
+            pass
+
+        def invoke(self, messages):
+            request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+            raise anthropic.APITimeoutError(request=request)
+
+    import langchain_anthropic
+    monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", _FakeChatAnthropic)
+
+    out = reason(system="sys", prompt="prompt", fallback="FALLBACK_REAL_TIMEOUT")
+
+    assert out == "FALLBACK_REAL_TIMEOUT"

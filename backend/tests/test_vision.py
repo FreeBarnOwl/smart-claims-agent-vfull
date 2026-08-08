@@ -3,6 +3,8 @@ Tests del modulo de extraccion multimodal (vision.py).
 Verifica el comportamiento de fallback y la configuracion de timeout
 (blindaje A4) sin depender de la red real.
 """
+import httpx
+
 from app.agents.vision import analyze_document
 
 
@@ -34,3 +36,28 @@ def test_analyze_document_configures_timeout(monkeypatch):
 
     assert out is None
     assert captured.get("timeout") == 20
+
+
+def test_analyze_document_falls_back_on_real_api_timeout_error(monkeypatch):
+    """Blindaje A4 (realista): ante `anthropic.APITimeoutError` real (no un
+    RuntimeError generico), analyze_document() debe caer a None igual que
+    ante cualquier otro fallo de red, permitiendo que el Agente C use su
+    camino simulado."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "fake-key")
+
+    import anthropic
+
+    class _FakeMessages:
+        def create(self, **kwargs):
+            request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+            raise anthropic.APITimeoutError(request=request)
+
+    class _FakeClient:
+        def __init__(self, *args, **kwargs):
+            self.messages = _FakeMessages()
+
+    monkeypatch.setattr(anthropic, "Anthropic", _FakeClient)
+
+    out = analyze_document(b"data", "image/png", "foto.png")
+
+    assert out is None

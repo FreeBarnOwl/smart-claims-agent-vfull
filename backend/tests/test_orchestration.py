@@ -12,6 +12,7 @@ Los tests usan SQLite en memoria para evitar dependencia de MariaDB.
 import os
 import random
 
+import httpx
 import pytest
 
 import app.agents.orchestrator as orchestrator_module
@@ -183,6 +184,40 @@ async def test_duplicate_documents_are_deduplicated_before_validation(test_db):
 
     assert result["validation_result"]["is_valid"] is False
     assert result["validation_result"]["provided_docs"] == ["foto_danys"]
+
+
+@pytest.mark.asyncio
+async def test_flow_completes_with_decision_when_llm_times_out_for_real(test_db, monkeypatch):
+    """Blindaje A4 end-to-end: si el LLM agota el timeout con la excepcion
+    real del SDK (anthropic.APITimeoutError) en CADA llamada de reasoning,
+    el flujo completo debe seguir produciendo una decision (via fallback
+    determinista en cada agente), no bloquearse ni propagar el error."""
+    import anthropic
+
+    class _FakeChatAnthropic:
+        def __init__(self, **kwargs):
+            pass
+
+        def invoke(self, messages):
+            request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+            raise anthropic.APITimeoutError(request=request)
+
+    import langchain_anthropic
+    monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", _FakeChatAnthropic)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "fake-key-times-out")
+
+    random.seed(7)
+    result = await process_claim(
+        claim_id         = "CLM-REALTIMEOUT",
+        client_id        = "C-REALTIMEOUT",
+        claim_type       = "danys_propis",
+        amount_requested = 3200.0,
+        documents        = FULL_DOCS,
+    )
+
+    assert result["status"]                    == "resolved"
+    assert result["decision"]                  == "PAGO"
+    assert result["resolution"]["amount_paid"] is not None
 
 
 @pytest.mark.asyncio
