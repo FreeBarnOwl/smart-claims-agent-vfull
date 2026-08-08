@@ -14,6 +14,7 @@ import random
 
 import pytest
 
+import app.agents.orchestrator as orchestrator_module
 from app.agents.orchestrator import process_claim
 
 
@@ -94,6 +95,38 @@ async def test_flow_request_info_missing_docs(test_db):
     assert "factura" in result["validation_result"]["missing_docs"]
     # El flujo no llega al claim_resolver
     assert result.get("resolution") is None
+
+
+@pytest.mark.asyncio
+async def test_process_claim_handles_internal_error_gracefully(test_db, monkeypatch):
+    """Una excepcion no controlada dentro del grafo NO debe propagarse: debe
+    derivar a REVISION_HUMANA con motivo legible (blindaje A2)."""
+    random.seed(7)
+
+    class _FailingGraph:
+        async def ainvoke(self, *args, **kwargs):
+            raise RuntimeError("fallo interno simulado")
+
+    monkeypatch.setattr(orchestrator_module, "orchestrator", _FailingGraph())
+
+    result = await process_claim(
+        claim_id         = "CLM-ERR",
+        client_id        = "C-ERR",
+        claim_type       = "danys_propis",
+        amount_requested = 1000.0,
+        documents        = FULL_DOCS,
+    )
+
+    assert result["status"]             == "pending_review"
+    assert result["decision"]           == "REVISION_HUMANA"
+    assert result["hitl_required"]      is True
+    assert result["termination_reason"] == "error_interno_controlado"
+
+    agents_invoked = [d["agent"] for d in result["decisions_log"]]
+    assert "agent_a_orchestrator" in agents_invoked
+    # El mensaje interno de la excepcion NUNCA debe filtrarse al reasoning/UI.
+    for entry in result["decisions_log"]:
+        assert "fallo interno simulado" not in (entry.get("reasoning") or "")
 
 
 @pytest.mark.asyncio

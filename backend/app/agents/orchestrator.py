@@ -277,7 +277,37 @@ async def process_claim(
         "decisions_log":    [],
     }
 
-    final = await orchestrator.ainvoke(initial)
+    try:
+        final = await orchestrator.ainvoke(initial)
+    except Exception:
+        # Cualquier fallo no controlado dentro del grafo (bug, timeout no
+        # capturado por un nodo, dependencia caida) nunca debe propagarse:
+        # el expediente se deriva a revision humana con un motivo legible.
+        # El detalle real de la excepcion se registra SOLO en el log del
+        # servidor, nunca en el estado devuelto (ni en decisions_log ni en
+        # reasoning_trace), para no filtrarlo a la UI ni a la API.
+        logger.exception("Fallo interno no controlado procesando %s", claim_id)
+        error_reasoning = (
+            f"Agente A: se ha producido un error interno no controlado al "
+            f"procesar el expediente {claim_id}. Por seguridad, el expediente "
+            f"se deriva a revision humana."
+        )
+        final = {
+            **initial,
+            "status":             ClaimStatus.PENDING_REVIEW.value,
+            "decision":           "REVISION_HUMANA",
+            "hitl_required":      True,
+            "terminate":          True,
+            "termination_reason": "error_interno_controlado",
+            "reasoning_trace":    initial["reasoning_trace"] + [error_reasoning],
+            "decisions_log":      initial["decisions_log"] + [{
+                "agent":         "agent_a_orchestrator",
+                "action":        "error_interno_controlado",
+                "reasoning":     error_reasoning,
+                "confidence":    None,
+                "hitl_required": True,
+            }],
+        }
 
     # Normaliza status y decision cuando el flujo se ha cortado sin pasar
     # por el claim_resolver (fraude detectado, documentos incompletos, etc.)
