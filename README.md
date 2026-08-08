@@ -117,20 +117,31 @@ Cliente envía reclamación
         ▼
 [A] Orquestador — triaje y enrutamiento
         │
-        ├──► [G] Verificación OFAC/fraude (filtro temprano)
+        ▼
+[B] Validación documental
+        │    └── ¿Faltan documentos? → END, solicitar al cliente (G nunca se invoca)
+        ▼
+[C] Extracción VLM (fotos, facturas, actas)
         │
-        ├──► [B] Validación documental
-        │         └── ¿Faltan documentos? → solicitar al cliente
+        ▼
+[G] Verificación OFAC/fraude
+        │    └── ¿Flagged? → END, caso bloqueado (D y E nunca se invocan)
+        ▼
+[D] Verificación de cobertura via RAG
         │
-        ├──► [C] Extracción VLM (fotos, facturas, actas)
-        │
-        ├──► [D] Verificación de cobertura via RAG
-        │
-        └──► [E] Decisión autónoma
-                  ├── Importe ≤ umbral → PAGO automático
-                  ├── Importe > umbral → HITL (revisión humana)
-                  └── Sin cobertura   → RECHAZO justificado
+        ▼
+[E] Decisión autónoma
+        ├── Importe ≤ umbral → PAGO automático
+        ├── Importe > umbral → HITL (revisión humana)
+        └── Sin cobertura    → RECHAZO justificado
 ```
+
+El orden real (`supervisor_router()` en `orchestrator.py`) es **A→B→C→G→D→E**, no G como
+filtro de entrada tras A: el cribado de fraude/cumplimiento se ejecuta **después** de la
+recepción documental y la extracción, para que sus 4 detectores (incluida la coherencia
+documental) dispongan de los datos ya extraídos. Consecuencia relevante para el diseño: si
+faltan documentos, el flujo corta en B con `INFO_REQUERIDA` **antes** de que G llegue a
+evaluar una posible coincidencia OFAC.
 
 ---
 
@@ -434,7 +445,7 @@ Toma la decisión final y ejecuta la acción via Mock APIs. Registra el razonami
 
 **Fichero:** `backend/app/agents/agent_g.py`
 
-Verifica listas OFAC/ONU y calcula score de riesgo. Se invoca como **filtro de entrada**, alineado con política PEPIN-POL-CP-0006.
+Verifica listas OFAC/ONU y calcula score de riesgo, alineado con política PEPIN-POL-CP-0006. En el orden real de ejecución se invoca **tras la validación documental y la extracción** (A→B→C→**G**→D→E, ver [§1](#1-arquitectura-del-sistema)), no como filtro de entrada inmediato tras A.
 
 **Pain points:** compliance como filtro de salida · brecha en debida diligencia temprana.
 
