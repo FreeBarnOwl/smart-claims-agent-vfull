@@ -50,11 +50,11 @@ async def create_and_process_claim(request: ClaimCreateRequest) -> ClaimResponse
             documents        = request.documents,
             client_email     = request.client_email,
         )
-    except Exception as exc:
+    except Exception:
         logger.exception("[API] Error procesando %s", claim_id)
         raise HTTPException(
             status_code = 500,
-            detail      = f"Error procesando la reclamacion: {exc}",
+            detail      = "Error interno procesando la reclamacion. Se ha registrado el incidente.",
         )
 
     resolution = final_state.get("resolution") or {}

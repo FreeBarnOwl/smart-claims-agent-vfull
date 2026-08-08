@@ -11,6 +11,7 @@ una pantalla de bienvenida (menu) con navegacion lateral.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import sys
 import time
@@ -42,6 +43,8 @@ except Exception:
     pass
 
 from app.agents.orchestrator import process_claim  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 
 # ── Constantes de presentacion ────────────────────────────────────────────
@@ -249,14 +252,19 @@ def render_timeline(result: dict) -> None:
 def process_and_store(client_id, client_email, claim_type, amount, documents,
                       client_name=None, uploaded=None):
     claim_id = f"CLM-{uuid.uuid4().hex[:8].upper()}"
-    with st.spinner("Procesando la reclamación con los agentes..."):
-        start = time.time()
-        result = _run(process_claim(
-            claim_id=claim_id, client_id=client_id, claim_type=claim_type,
-            amount_requested=float(amount), channel="web",
-            documents=documents, client_email=client_email,
-            client_name=client_name, uploaded_files=uploaded,
-        ))
+    try:
+        with st.spinner("Procesando la reclamación con los agentes..."):
+            start = time.time()
+            result = _run(process_claim(
+                claim_id=claim_id, client_id=client_id, claim_type=claim_type,
+                amount_requested=float(amount), channel="web",
+                documents=documents, client_email=client_email,
+                client_name=client_name, uploaded_files=uploaded,
+            ))
+    except Exception:
+        logger.exception("Fallo interno no controlado procesando %s", claim_id)
+        st.error("No se pudo procesar la reclamación. Se ha registrado el incidente.")
+        return
     result.update({"_elapsed": time.time() - start, "_claim_id": claim_id,
                    "_client_id": client_id, "_claim_type": claim_type,
                    "_amount_requested": float(amount)})
