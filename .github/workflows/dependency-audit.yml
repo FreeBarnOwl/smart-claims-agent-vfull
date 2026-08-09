@@ -217,27 +217,27 @@ jobs:
       id: outdated-check
       run: |
         python -c "
-import subprocess
-import json
+        import subprocess
+        import json
 
-# Check for outdated packages
-try:
-    result = subprocess.run(['pip', 'list', '--outdated', '--format=json'],
-                          capture_output=True, text=True)
-    outdated = json.loads(result.stdout)
-    count = len(outdated)
-    print(f'outdated_count={count}')
+        # Check for outdated packages
+        try:
+            result = subprocess.run(['pip', 'list', '--outdated', '--format=json'],
+                                  capture_output=True, text=True)
+            outdated = json.loads(result.stdout)
+            count = len(outdated)
+            print(f'outdated_count={count}')
 
-    # Set output for GitHub Actions
-    with open('$GITHUB_OUTPUT', 'a') as f:
-        f.write(f'outdated_count={count}\n')
-        f.write(f'has_outdated={\"true\" if count > 0 else \"false\"}\n')
-except Exception as e:
-    print(f'Error checking outdated packages: {e}')
-    with open('$GITHUB_OUTPUT', 'a') as f:
-        f.write('outdated_count=0\n')
-        f.write('has_outdated=false\n')
-"
+            # Set output for GitHub Actions
+            with open('$GITHUB_OUTPUT', 'a') as f:
+                f.write(f'outdated_count={count}\n')
+                f.write(f'has_outdated={\"true\" if count > 0 else \"false\"}\n')
+        except Exception as e:
+            print(f'Error checking outdated packages: {e}')
+            with open('$GITHUB_OUTPUT', 'a') as f:
+                f.write('outdated_count=0\n')
+                f.write('has_outdated=false\n')
+        "
 
     - name: Create dependency update issue
       if: steps.outdated-check.outputs.has_outdated == 'true'
