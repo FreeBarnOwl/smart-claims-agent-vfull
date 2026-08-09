@@ -460,8 +460,8 @@ if view == "home":
     with col3:
         with st.container(border=True):
             st.markdown("#### ⚡ Escenarios de demostración")
-            st.write("Lanza con un clic los cuatro casos representativos del flujo "
-                     "(pago, revisión humana, información, rechazo).")
+            st.write("Lanza con un clic los cinco casos representativos del flujo "
+                     "(pago, revisión humana, información, rechazo y bloqueo por fraude).")
             st.button("Ir a escenarios", key="tile_demo", use_container_width=True,
                       on_click=go, args=("nueva",))
     with col4:
