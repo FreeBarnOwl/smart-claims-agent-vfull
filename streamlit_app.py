@@ -740,11 +740,19 @@ Cada agente hace su trabajo y devuelve el control al supervisor.
         with st.container(border=True):
             st.markdown(f"**{name}**")
             st.caption(desc)
+    st.markdown('<div class="sca-section">Módulo aparte (fuera del recorrido automático)</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown(f"**{AGENT_LABELS['agent_f_conciliation_advisor']}**")
+        st.caption("No forma parte del grafo de 6 nodos de arriba — es un módulo independiente, con su "
+                   "propia vista de demostración, que recomienda el siguiente paso en negociaciones tras "
+                   "un primer rechazo de oferta. Reglas fijas, sin IA; la decisión y su ejecución las toma "
+                   "siempre una persona.")
     st.markdown('<div class="sca-section">Características clave</div>', unsafe_allow_html=True)
     st.markdown("""
 - **Human-in-the-Loop (HITL):** revisión humana si hay fraude o si el importe supera el umbral (5.000 €).
 - **Razonamiento (CoT) por agente**, con LLM Claude Sonnet 4.6 **opcional** y *fallback* determinista.
 - **Persistencia auditable** de decisiones en MariaDB (en este despliegue, best-effort).
-- **Integraciones externas simuladas** (mock): OFAC, pagos, notificaciones y RAG de pólizas.
+- **RAG de pólizas activo por defecto** (ChromaDB embebido), con reserva determinista a una tabla de reglas fija si no está disponible.
+- **Integraciones externas simuladas** (mock): OFAC, pagos y notificaciones.
 """)
     st.button("← Volver al inicio", on_click=go, args=("home",))
