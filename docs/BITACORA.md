@@ -294,3 +294,31 @@ salvedad de que F ya tiene un demostrador funcional en este prototipo.
 **Hito 12.4 — Verificación.** 22 tests nuevos en `test_conciliation_advisor.py` (una regla por
 tramo, bordes exactos de los umbrales de días, determinismo) + 1 test de UI
 (`test_streamlit_ui.py`). Suite completa: 99 tests, verde.
+
+## Fase 13 — Blindaje A5: panel "Caso libre" (agosto 2026)
+
+Última pieza pendiente del blindaje de entrada (A1-A4 ya implementados y probados). Objetivo:
+que una petición improvisada del tribunal durante la defensa ("probad con este dato tan raro")
+sea algo ya anticipado en la propia demo, en vez de tener que improvisar sobre la marcha.
+
+Se añade la vista **"Caso libre"** a `streamlit_app.py`, accesible desde la navegación lateral.
+A diferencia del formulario de "Nueva reclamación" (que usa `st.selectbox` para el tipo de
+siniestro y `st.number_input` con tope de 100.000 € para el importe), aquí los cinco campos son
+texto libre (`st.text_input`), sin ninguna restricción de los propios controles de Streamlit:
+se puede escribir un tipo de siniestro inventado, un importe no numérico, un nombre
+arbitrariamente largo, etc. El importe se intenta convertir a `float`; si la conversión falla,
+el valor de texto se pasa **tal cual** a `process_claim` sin normalizar, para que sea
+`validate_claim_input()` (blindaje A1, `orchestrator.py`) quien lo capture con su propio motivo
+legible (p. ej. `importe reclamado invalido: 'no-es-un-numero'`) en vez de que la conversión
+falle antes siquiera de llegar al orquestador.
+
+Reutiliza el mismo camino ya blindado que el resto de vistas (`process_claim` vía una función
+`process_libre()` análoga a `process_and_store()`, con el mismo `try/except` que impide que
+cualquier fallo interno inesperado se muestre en pantalla — blindaje A2/A3).
+
+**Verificación:** nuevo test `test_caso_libre_view_lets_broken_amount_trigger_blindaje_a1`
+(`test_streamlit_ui.py`) que introduce un tipo de siniestro inventado y un importe no numérico
+y comprueba que el resultado es `RECHAZO` con el motivo legible del blindaje A1 visible en
+pantalla, sin ninguna excepción sin capturar. Suite completa: 100 tests, verde.
+
+Con esto, el blindaje de entrada (A1-A5) queda completo.

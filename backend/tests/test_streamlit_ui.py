@@ -88,6 +88,34 @@ def test_bandeja_view_shows_fixture_cases_and_processes_pago_automatico():
     assert "Pago aprobado" in result_text
 
 
+def test_caso_libre_view_lets_broken_amount_trigger_blindaje_a1():
+    """Panel 'Caso libre' (blindaje A5): backup para peticiones improvisadas
+    del tribunal. A diferencia del formulario de 'Nueva reclamación', el
+    tipo de siniestro y el importe son texto libre (no selectbox/number_input
+    con limites), para poder introducir en directo un dato roto y demostrar
+    que el blindaje de entrada (Agente A, validate_claim_input) lo atrapa
+    con un motivo legible en vez de fallar."""
+    os.environ.pop("ANTHROPIC_API_KEY", None)
+
+    at = AppTest.from_file(STREAMLIT_APP_PATH, default_timeout=30)
+    at.run()
+    at.session_state["view"] = "libre"
+    at.run()
+
+    assert not at.exception
+
+    at.text_input(key="libre_client_name").set_value("Caso Libre Tribunal").run()
+    at.text_input(key="libre_claim_type").set_value("tipo-inventado-por-el-tribunal").run()
+    at.text_input(key="libre_amount").set_value("no-es-un-numero").run()
+
+    at.button(key="libre_submit").click().run()
+
+    assert not at.exception
+    all_text = " ".join(str(el.value) for el in (*at.markdown, *at.caption))
+    assert "Rechazado" in all_text
+    assert "importe reclamado invalido: 'no-es-un-numero'" in all_text
+
+
 def test_conciliacion_view_shows_fixture_recommendations():
     """Vista 'Conciliación (Agente F)': demostrador secundario e
     independiente del flujo principal. Debe mostrar los 3 casos DPA/RC de

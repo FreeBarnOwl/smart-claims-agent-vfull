@@ -284,6 +284,32 @@ def process_and_store(client_id, client_email, claim_type, amount, documents,
     st.session_state["history"].insert(0, result)
 
 
+def process_libre(client_id, client_email, claim_type, amount, documents, client_name=None):
+    """Como process_and_store, pero sin forzar el importe a float: si el
+    valor introducido no es numerico se deja tal cual, para que el blindaje
+    A1 (validate_claim_input) lo capture con su propio motivo legible en
+    vez de que la conversion falle antes de llegar al orquestador."""
+    claim_id = f"CLM-{uuid.uuid4().hex[:8].upper()}"
+    try:
+        with st.spinner("Procesando el caso libre con los agentes..."):
+            start = time.time()
+            result = _run(process_claim(
+                claim_id=claim_id, client_id=client_id, claim_type=claim_type,
+                amount_requested=amount, channel="web",
+                documents=documents, client_email=client_email,
+                client_name=client_name,
+            ))
+    except Exception:
+        logger.exception("Fallo interno no controlado procesando caso libre %s", claim_id)
+        st.error("No se pudo procesar la reclamación. Se ha registrado el incidente.")
+        return
+    result.update({"_elapsed": time.time() - start, "_claim_id": claim_id,
+                   "_client_id": client_id, "_claim_type": claim_type,
+                   "_amount_requested": amount if isinstance(amount, (int, float)) else 0})
+    st.session_state["last_result"] = result
+    st.session_state["history"].insert(0, result)
+
+
 def read_uploads(files) -> list[dict]:
     """Convierte los ficheros de st.file_uploader en la forma que espera el Agente C."""
     out = []
@@ -397,6 +423,7 @@ with st.sidebar:
               on_click=go, args=("conciliacion",))
     st.button("Historial",           key="nav_hist",  use_container_width=True, on_click=go, args=("historial",))
     st.button("Arquitectura",        key="nav_arq",   use_container_width=True, on_click=go, args=("arquitectura",))
+    st.button("Caso libre",          key="nav_libre", use_container_width=True, on_click=go, args=("libre",))
     st.divider()
     has_key = bool(os.getenv("ANTHROPIC_API_KEY"))
     st.caption(("🟢 Claude activo (CoT enriquecido)" if has_key
@@ -565,6 +592,51 @@ elif view == "nueva":
             process_and_store(client_id or "CLIENT-A", client_email or "cliente@segurospepin.com",
                               claim_type, amount, documents,
                               client_name=client_name or None, uploaded=read_uploads(uploaded))
+
+    if st.session_state.get("last_result"):
+        st.divider()
+        render_result(st.session_state["last_result"])
+
+
+# ── Vista: CASO LIBRE (blindaje A5, backup para peticiones de tribunal) ────
+
+elif view == "libre":
+    st.markdown("## Caso libre")
+    st.markdown(
+        "**Panel de reserva** para peticiones improvisadas del tribunal. A "
+        "diferencia de 'Nueva reclamación', aquí el tipo de siniestro y el "
+        "importe son texto libre, sin desplegable ni tope numérico: se puede "
+        "introducir en directo cualquier dato — incluido uno pensado para "
+        "romper el sistema — para enseñar cómo el blindaje de entrada "
+        "(Agente A) lo atrapa con un motivo legible en vez de fallar."
+    )
+    a, b = st.columns(2)
+    libre_client_name = a.text_input("Nombre del asegurado", key="libre_client_name",
+                                     placeholder="Cualquier texto, sin límite de longitud")
+    libre_client_id = b.text_input("ID Cliente", key="libre_client_id",
+                                   placeholder="p. ej. CLIENT-LIBRE")
+    libre_claim_type = a.text_input("Tipo de siniestro", key="libre_claim_type",
+                                    placeholder="danys_propis, responsabilitat, robatori, "
+                                                "danys_mecanics… o cualquier otro texto")
+    libre_amount = b.text_input("Importe reclamado", key="libre_amount",
+                                placeholder="Cualquier valor, incluso no numérico")
+    libre_documents = st.text_input("Documentos aportados (separados por comas)",
+                                    key="libre_documents", placeholder="foto_danys, factura")
+    if st.button("Procesar caso libre", key="libre_submit", use_container_width=True):
+        if not libre_claim_type and not libre_amount:
+            st.warning("Indica al menos el tipo de siniestro y el importe reclamado.")
+        else:
+            documents = [d.strip() for d in libre_documents.split(",") if d.strip()]
+            amount_text = (libre_amount or "").strip()
+            try:
+                amount_value = float(amount_text)
+            except ValueError:
+                # Se deja tal cual: el blindaje A1 lo captura con su propio
+                # motivo legible en vez de que la conversion falle aqui.
+                amount_value = amount_text
+            process_libre(libre_client_id or "CLIENT-LIBRE", "cliente@segurospepin.com",
+                          libre_claim_type, amount_value, documents,
+                          client_name=libre_client_name or None)
 
     if st.session_state.get("last_result"):
         st.divider()
