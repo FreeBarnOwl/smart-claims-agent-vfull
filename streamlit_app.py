@@ -465,12 +465,7 @@ if view == "home":
             st.button("Ir a escenarios", key="tile_demo", use_container_width=True,
                       on_click=go, args=("nueva",))
     with col4:
-        with st.container(border=True):
-            st.markdown("#### 🏛 Arquitectura del sistema")
-            st.write("Conoce el patrón Supervisor (Hub-and-Spoke), los seis agentes "
-                     "y el motor antifraude de cuatro detectores.")
-            st.button("Ver arquitectura", key="tile_arq", use_container_width=True,
-                      on_click=go, args=("arquitectura",))
+        pass  # TEMP: tarjeta Arquitectura ocultada para probar si el deploy de Streamlit Cloud refleja cambios
 
 
 # ── Vista: BANDEJA (ingesta multicanal simulada) ───────────────────────────
