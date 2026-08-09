@@ -2,7 +2,7 @@
 
 Este documento explica el prototipo de gestión automática de siniestros de seguros que hemos construido para el TFM, sin usar código ni tecnicismos sin explicar. Está pensado para que cualquiera del equipo pueda leerlo en unos 15 minutos y entender qué hace el sistema, qué partes usan IA de verdad y cuáles están simuladas, y qué ha cambiado desde la Entrega 2.
 
-**Regla de oro de este documento:** todo lo que dice viene del código real del repositorio, revisado línea por línea el 2026-08-08. Cuando algo no se ha podido confirmar del todo, aparece marcado como `[VERIFICAR]` en vez de dar por hecho algo que podría no ser cierto. Si en algún momento el código cambia, este documento puede quedarse desactualizado — conviene revisarlo antes de usarlo en la defensa si ha pasado tiempo.
+**Regla de oro de este documento:** todo lo que dice viene del código real del repositorio, revisado línea por línea el 2026-08-08 y actualizado de nuevo el 2026-08-09 (caso libre, Agente H, textos de interfaz pendientes, número de pruebas). Cuando algo no se ha podido confirmar del todo, aparece marcado como `[VERIFICAR]` en vez de dar por hecho algo que podría no ser cierto. Si en algún momento el código cambia, este documento puede quedarse desactualizado — conviene revisarlo antes de usarlo en la defensa si ha pasado tiempo.
 
 ---
 
@@ -97,7 +97,12 @@ Con eso en mente, esto es lo que usa IA real (Claude) y lo que es determinista, 
 
 **RAG** significa "generación aumentada por recuperación" — en la práctica, es una forma de que el sistema busque primero el fragmento de texto relevante (aquí, el texto real de la póliza) y luego lo use para responder con más precisión, en vez de "inventar" la respuesta de memoria.
 
-`[VERIFICAR]`: dentro de la propia aplicación hay una pantalla ("Arquitectura") que en un sitio describe el RAG de pólizas como una integración simulada, aunque en la práctica está activado por defecto y es una capacidad real. Si alguien del tribunal ve esa pantalla y pregunta por esta aparente contradicción, la respuesta correcta es la de este documento: el RAG es una capacidad real que se activa por defecto, con una tabla de reglas fija como reserva si no está disponible.
+`[VERIFICAR]` — dos discrepancias conocidas entre el texto de la interfaz y el comportamiento real, confirmadas en el código el 2026-08-09 y **todavía sin corregir**:
+
+- La pantalla de inicio dice *"Lanza con un clic los cuatro casos representativos del flujo (pago, revisión humana, información, rechazo)"* (`streamlit_app.py:463-464`), pero la aplicación tiene **cinco** escenarios de demostración, no cuatro — falta contar el quinto, el bloqueo por fraude OFAC (`DEMO_SCENARIOS`, `streamlit_app.py:107-124`, sección "Escenarios rápidos" de la vista "Nueva reclamación"). Si el tribunal lo señala, la respuesta correcta es reconocerlo como un texto de la interfaz que quedó desactualizado al añadir el quinto escenario, no que el sistema solo cubra cuatro caminos.
+- La vista "Arquitectura" describe el RAG de pólizas como una integración simulada: *"Integraciones externas simuladas (mock): OFAC, pagos, notificaciones y RAG de pólizas."* (`streamlit_app.py:748`). En la práctica, el RAG está activado por defecto (`os.environ.setdefault("SCA_RAG_ENABLED", "1")`, `streamlit_app.py:38`) y es una capacidad real con ChromaDB embebido (`coverage_checker.py`), no una simulación — solo cae a la tabla de reglas fija si ChromaDB no está disponible. La respuesta correcta ante esta pregunta es la de este documento: el RAG es real, con una reserva determinista si falla.
+
+Ninguna de las dos discrepancias es un fallo funcional — no cambian ninguna decisión ni ningún pago — pero conviene saber explicarlas si el tribunal las señala en pantalla durante la defensa.
 
 ### Pregunta 2: "¿Qué pasa si la IA falla o no hay conexión?"
 
@@ -129,14 +134,14 @@ Una diferencia importante frente a los demás agentes: el Agente F **no forma pa
 
 ### El "blindaje" de entrada (validación y manejo de errores)
 
-Durante el desarrollo se ha ido reforzando el sistema contra entradas inesperadas o fallos internos — a esto el equipo se refiere internamente como "blindaje". A fecha de este documento, estas son las piezas ya implementadas y verificadas con pruebas automáticas:
+Durante el desarrollo se ha ido reforzando el sistema contra entradas inesperadas o fallos internos — a esto el equipo se refiere internamente como "blindaje". A fecha de este documento, estas son las piezas ya implementadas y verificadas con pruebas automáticas (la suite de `backend/tests` suma **100 pruebas**, todas en verde en la última ejecución, 2026-08-09):
 
 - Validación de que el importe reclamado, el tipo de siniestro y el nombre del cliente tienen sentido antes de procesar nada.
 - Una red de seguridad general que evita que cualquier error interno inesperado se muestre en pantalla, derivando el caso a revisión humana en su lugar.
 - La garantía, ya explicada en la sección 2, de que ningún mensaje técnico de error llega nunca a la pantalla del usuario.
 - Un tiempo máximo de espera para las llamadas a la IA, con reserva automática a texto fijo si se agota.
 
-`[VERIFICAR]`: en la planificación interna del equipo se había previsto además un panel de "caso libre" en la aplicación, pensado para poder introducir un caso improvisado si el tribunal pide probar algo fuera de los escenarios preparados. A fecha de este documento **no se ha encontrado ese panel implementado en el código** — no debe darse por hecho que existe hasta que se confirme lo contrario.
+**Actualización 2026-08-09 — el panel de "caso libre" ya existe.** En la planificación interna del equipo se había previsto un panel en la aplicación para poder introducir un caso improvisado si el tribunal pide probar algo fuera de los escenarios preparados. Ese panel se implementó el 2026-08-09: es la vista "Caso libre" de la aplicación (botón de navegación lateral, `streamlit_app.py:426`; vista completa en `streamlit_app.py:603-643`). A diferencia de "Nueva reclamación" (donde el tipo de siniestro y el importe usan un desplegable y un campo numérico con límites), en "Caso libre" los cinco campos son de texto libre sin ningún límite — se puede escribir cualquier tipo de siniestro inventado o un importe no numérico en directo, y el sistema lo captura con el mismo blindaje de entrada (Agente A) que el resto de la aplicación, mostrando un motivo legible en vez de fallar. Cubierto por un test automático (`test_caso_libre_view_lets_broken_amount_trigger_blindaje_a1`, `backend/tests/test_streamlit_ui.py:91-116`) y documentado con más detalle, incluidos casos de prueba paso a paso, en `docs/testing/uat_scripts.md`.
 
 ---
 
@@ -158,6 +163,8 @@ Para tener a mano durante la defensa, sin tener que buscar en el resto del docum
 - **0,82 sobre 1** — el nivel de parecido de texto necesario entre el nombre de un cliente y una entidad de la lista de sanciones para que el sistema lo marque como posible coincidencia. No hace falta que el nombre sea idéntico.
 - **90 días** — la ventana de tiempo en la que el sistema busca reclamaciones muy parecidas ya presentadas, para detectar posibles duplicados.
 - **~20 segundos** — el tiempo máximo que el sistema espera una respuesta de la IA antes de usar el texto de reserva.
+
+**Caso libre:** panel aparte en la aplicación (no forma parte del recorrido A→B→C→G→D→E) con los cinco campos en texto libre sin límites, para probar en directo cualquier caso improvisado que pida el tribunal — el mismo blindaje de entrada del Agente A se aplica igual (ver sección 3).
 
 **Por qué B va antes que G (documentos antes que fraude):** si a un cliente que resulta estar en la lista de sanciones le faltan documentos, el sistema le pedirá la documentación que falta en vez de bloquearlo directamente por fraude — porque el Agente G nunca llega a ejecutarse si el Agente B ya cortó el proceso antes. Esto es una decisión de diseño conocida y documentada, no un error: en ningún caso se paga nada, así que no hay riesgo económico, aunque conviene saber explicarlo si el tribunal lo pregunta.
 
@@ -210,4 +217,4 @@ A diferencia de los demás agentes, el Agente F **no forma parte del recorrido a
 
 ### Agente H — *(sin implementar)*
 
-El catálogo original de agentes del proyecto (Entrega 1) contemplaba un octavo agente, pensado como un asistente legal de apoyo para expedientes que ya han llegado a la vía judicial. `[VERIFICAR — confirmado a fecha de este documento]`: el Agente H **no se ha llegado a implementar** en ningún momento del proyecto — no existe como código, ni como parte de la aplicación, ni como módulo independiente como sí lo es el Agente F. Se menciona en la documentación del proyecto únicamente como algo reservado para una fase posterior, fuera del alcance de esta entrega. Por eso la numeración de los agentes salta de la E a la G: las letras F y H se reservaron desde el principio para estas dos piezas adicionales, y de las dos, solo el Agente F ha llegado a tener una versión funcional en este prototipo.
+En el diseño original del proyecto (Entrega 1), el equipo definió una ficha completa para los ocho agentes, de la A a la H — F y H incluidos. El Agente H estaba pensado como un **copiloto de consulta para inspectores y abogados**: una herramienta apoyada en RAG para consultar el expediente una vez un caso llega a vía judicial. `[VERIFICAR — confirmado a fecha de este documento]`: el Agente H **no se ha llegado a implementar** en ningún momento del proyecto — no existe como código, ni como parte de la aplicación, ni como módulo independiente como sí lo es el Agente F. Su ausencia **no** se debe a que la letra se reservara desde el principio para más adelante — el tribunal tiene la Entrega 1, donde el Agente H ya tenía ficha propia — sino a una **decisión de alcance tomada durante el desarrollo**: con un volumen tan bajo de expedientes judicializados (unos 10 al año, ver sección 3), el equipo decidió dejarlo fuera del alcance de este MVP y concentrar el esfuerzo en el recorrido principal A-B-C-G-D-E y en el rediseño del Agente F. Por eso la numeración de los agentes implementados salta de la E a la G: no porque F y H no existieran en el diseño original, sino porque de los ocho agentes que sí tuvieron ficha completa en la Entrega 1, solo seis (A, B, C, G, D, E) más una versión rediseñada del F llegaron a implementarse en este prototipo.
