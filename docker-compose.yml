@@ -24,21 +24,26 @@ services:
     command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
   # ──────────────────────────────────────────
-  # Frontend Streamlit
+  # Frontend Streamlit (DESACTIVADO)
+  # frontend/app.py es la version antigua del dashboard (llama al backend
+  # por HTTP). La app vigente es streamlit_app.py (raiz del repo), que se
+  # ejecuta aparte con `streamlit run streamlit_app.py` — no forma parte de
+  # este docker-compose. Se deja el servicio comentado, sin borrar el
+  # codigo, por si se necesita recuperar.
   # ──────────────────────────────────────────
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: sca-frontend
-    ports:
-      - "8501:8501"
-    volumes:
-      - ./frontend:/app
-    env_file: .env
-    depends_on:
-      - backend
-    restart: unless-stopped
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: sca-frontend
+  #   ports:
+  #     - "8501:8501"
+  #   volumes:
+  #     - ./frontend:/app
+  #   env_file: .env
+  #   depends_on:
+  #     - backend
+  #   restart: unless-stopped
 
   # ──────────────────────────────────────────
   # ChromaDB — vector store per al RAG
