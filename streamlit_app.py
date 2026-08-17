@@ -139,7 +139,11 @@ st.set_page_config(
 st.markdown(f"""
 <style>
     #MainMenu, footer {{ visibility: hidden; }}
-    header[data-testid="stHeader"] {{ display: none; }}
+    /* No se oculta el header completo (display:none): dentro de él vive el
+       botón para volver a abrir el sidebar una vez colapsado. Se deja
+       transparente y sin sombra para que sea invisible cuando el sidebar
+       está abierto, pero siga presente y clicable cuando está colapsado. */
+    header[data-testid="stHeader"] {{ background: transparent; box-shadow: none; }}
     .stApp {{ background: {C_BG}; }}
     html, body, [class*="css"] {{
         font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -206,6 +210,11 @@ if "prefill" not in st.session_state:
 
 
 def go(view: str, prefill=None) -> None:
+    # Al navegar se descarta el resultado mostrado en la vista que se abandona:
+    # si no, al volver a esa vista (o a la misma) seguía viéndose el expediente
+    # de la última ejecución, aunque no se hubiera vuelto a procesar nada.
+    st.session_state["last_result"] = None
+    st.session_state["bandeja_last_case_id"] = None
     st.session_state["view"] = view
     if prefill is not None:
         st.session_state["prefill"] = prefill
@@ -263,6 +272,9 @@ def render_timeline(result: dict) -> None:
 
 def process_and_store(client_id, client_email, claim_type, amount, documents,
                       client_name=None, uploaded=None):
+    # Se descarta el resultado anterior antes de procesar: si este intento
+    # falla, no debe quedar visible el expediente de un intento previo.
+    st.session_state["last_result"] = None
     claim_id = f"CLM-{uuid.uuid4().hex[:8].upper()}"
     try:
         with st.spinner("Procesando la reclamación con los agentes..."):
@@ -289,6 +301,7 @@ def process_libre(client_id, client_email, claim_type, amount, documents, client
     valor introducido no es numerico se deja tal cual, para que el blindaje
     A1 (validate_claim_input) lo capture con su propio motivo legible en
     vez de que la conversion falle antes de llegar al orquestador."""
+    st.session_state["last_result"] = None
     claim_id = f"CLM-{uuid.uuid4().hex[:8].upper()}"
     try:
         with st.spinner("Procesando el caso libre con los agentes..."):

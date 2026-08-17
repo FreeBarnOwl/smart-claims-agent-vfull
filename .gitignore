@@ -99,3 +99,4 @@ claude-commands/
 *.zip
 *.tar.gz
 *.tmp
+CLAUDE.md
