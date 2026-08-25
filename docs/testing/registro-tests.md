@@ -12,7 +12,7 @@ Documento de registro de las pruebas realizadas sobre el prototipo Smart-Claims 
 
 ```
 Fecha:      2026-08-25
-Commit:     47d3f1d + fixture _no_real_api_key (rama main)
+Commit:     a2d0340 (rama main)
 Entorno:    Windows 11 · Python 3.11.5 · pytest 9.0.3 · pytest-asyncio 1.3.0
 Comando:    py -3.11 -m pytest tests/ -q --durations=6      (desde backend/)
 Resultado:  100 passed in 40.90s
@@ -31,7 +31,7 @@ Los tests viven en [`backend/tests/`](../../backend/tests/) y se configuran en [
 - **Sin dependencias externas.** La fixture `test_db` de [`conftest.py`](../../backend/tests/conftest.py) sustituye la sesión de producción (aiomysql/MariaDB) por **SQLite asíncrono en memoria**; cada test arranca con un esquema limpio. No hace falta Docker.
 - **Sin LLM.** Sin `ANTHROPIC_API_KEY`, el helper `reason()` y el módulo de visión usan su **fallback determinista**, por lo que los tests son reproducibles y no consumen API. Cuando un test necesita verificar el comportamiento *con* LLM (timeouts, contenido adversarial), lo simula con `monkeypatch`, incluyendo excepciones reales del SDK (`anthropic.APITimeoutError`).
 - **UI probada en headless.** La app Streamlit se ejecuta con `streamlit.testing.v1.AppTest`, sin navegador.
-- **RAG real en test.** Los tests de RAG usan el ChromaDB embebido con las pólizas sintéticas del repositorio; son los más lentos de la suite por la carga del modelo de embeddings.
+- **RAG real en test.** Los tests de RAG usan el ChromaDB embebido con las pólizas sintéticas del repositorio; la primera consulta paga la carga del modelo de embeddings (~5 s).
 
 > **Nota operativa.** El `.env` de la raíz del repositorio contiene una `ANTHROPIC_API_KEY` real para la demo local, y `backend/app/main.py` y `streamlit_app.py` la cargan con `load_dotenv()`. Hasta el 2026-08-25 eso hacía que buena parte de la suite llamara a la API real: `test_api.py` importa `app.main`, cuyo `load_dotenv` reinyectaba la clave *después* de los `os.environ.pop()` que cada módulo de test hacía al importarse, y todos los tests posteriores en orden de recolección corrían con la clave puesta. (Los scripts `evaluate_inprocess.py` y `uat_t2_random_amounts.py` no se veían afectados: importan solo el orquestador, no `app.main`.) Desde entonces, la fixture `autouse` `_no_real_api_key` de `conftest.py` fija `ANTHROPIC_API_KEY=""` antes de cada test: `load_dotenv` no sobrescribe una variable ya definida y `reasoning.py`/`vision.py` tratan la cadena vacía como ausencia de clave. Resultado: **cero llamadas a la API desde los tests**, sin depender de que quien los lance recuerde vaciar la variable.
 
