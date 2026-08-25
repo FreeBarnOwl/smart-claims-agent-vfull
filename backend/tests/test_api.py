@@ -2,13 +2,10 @@
 Tests de integracion de la API REST.
 Usan httpx.AsyncClient sobre la app FastAPI con SQLite en memoria.
 """
-import os
 import random
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
-os.environ.pop("ANTHROPIC_API_KEY", None)
 
 
 @pytest.fixture(autouse=True)

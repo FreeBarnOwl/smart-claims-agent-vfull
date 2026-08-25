@@ -9,7 +9,6 @@ Cubre los 4 escenarios principales del sistema:
 
 Los tests usan SQLite en memoria para evitar dependencia de MariaDB.
 """
-import os
 import random
 
 import httpx
@@ -18,9 +17,6 @@ import pytest
 import app.agents.orchestrator as orchestrator_module
 from app.agents.orchestrator import process_claim
 
-
-# Sin LLM externo: tests rapidos y deterministas
-os.environ.pop("ANTHROPIC_API_KEY", None)
 
 # Semilla fija para que check_fraud (mock random) sea reproducible.
 random.seed(7)

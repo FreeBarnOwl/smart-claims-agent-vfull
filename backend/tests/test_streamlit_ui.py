@@ -5,7 +5,6 @@ streamlit.testing.v1.AppTest — ejecuta el script en modo headless.
 Verifica el blindaje A3: ante un fallo interno, la UI nunca debe mostrar
 un traceback en pantalla (ni el texto interno de la excepcion).
 """
-import os
 from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
@@ -21,8 +20,6 @@ def test_streamlit_demo_scenario_never_shows_raw_traceback(monkeypatch):
     """Si process_claim falla de forma inesperada, la UI debe mostrar un
     mensaje generico (st.error) y NUNCA el traceback ni el texto interno
     de la excepcion (blindaje A3)."""
-    os.environ.pop("ANTHROPIC_API_KEY", None)
-
     async def _boom(**kwargs):
         raise RuntimeError("detalle interno sensible que no debe salir")
 
@@ -52,8 +49,6 @@ def test_bandeja_view_shows_fixture_cases_and_processes_pago_automatico():
     mensaje de WhatsApp y sus adjuntos) y, al pulsar 'Revisar y procesar'
     sobre el caso completo, debe reutilizar el camino ya blindado
     (process_and_store) y terminar en PAGO automatico."""
-    os.environ.pop("ANTHROPIC_API_KEY", None)
-
     at = AppTest.from_file(STREAMLIT_APP_PATH, default_timeout=30)
     at.run()
     at.session_state["view"] = "bandeja"
@@ -95,8 +90,6 @@ def test_caso_libre_view_lets_broken_amount_trigger_blindaje_a1():
     con limites), para poder introducir en directo un dato roto y demostrar
     que el blindaje de entrada (Agente A, validate_claim_input) lo atrapa
     con un motivo legible en vez de fallar."""
-    os.environ.pop("ANTHROPIC_API_KEY", None)
-
     at = AppTest.from_file(STREAMLIT_APP_PATH, default_timeout=30)
     at.run()
     at.session_state["view"] = "libre"
@@ -121,8 +114,6 @@ def test_conciliacion_view_shows_fixture_recommendations():
     independiente del flujo principal. Debe mostrar los 3 casos DPA/RC de
     demo, cada uno con la recomendación real que produce
     advise_conciliation() (no texto estático)."""
-    os.environ.pop("ANTHROPIC_API_KEY", None)
-
     at = AppTest.from_file(STREAMLIT_APP_PATH, default_timeout=30)
     at.run()
     at.session_state["view"] = "conciliacion"

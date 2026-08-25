@@ -3,7 +3,6 @@ Tests de los agentes especialistas (B, C, D, G) y del Claim Resolver (E).
 Como reason() hace fallback determinista sin ANTHROPIC_API_KEY, estos
 tests son rapidos y no requieren red.
 """
-import os
 
 import pytest
 
@@ -13,9 +12,6 @@ from app.agents.document_validator   import document_validator_node
 from app.agents.fraud_compliance     import fraud_compliance_node
 from app.agents.multimodal_extractor import multimodal_extractor_node
 
-
-# Asegura que reason() use el fallback (sin clave de API)
-os.environ.pop("ANTHROPIC_API_KEY", None)
 
 
 BASE = {

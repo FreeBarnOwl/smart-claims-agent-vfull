@@ -14,6 +14,23 @@ from app.db.session  import Base
 from app.db          import models  # noqa: F401 — registra las tablas en Base.metadata
 
 
+@pytest.fixture(autouse=True)
+def _no_real_api_key(monkeypatch):
+    """Los tests nunca deben llamar a la API real de Anthropic.
+
+    Se fija ANTHROPIC_API_KEY a cadena vacia (no se borra) por dos motivos:
+    - app.main (importado por test_api.py) y streamlit_app.py (ejecutado por
+      AppTest) llaman a load_dotenv(), que rellenaria una variable ausente
+      desde el .env de la raiz pero no sobrescribe una ya definida
+      (override=False).
+    - reasoning.py y vision.py comprueban `if not os.getenv(...)`, asi que
+      la cadena vacia activa el fallback determinista igual que la ausencia.
+    Los tests que necesitan una clave (falsa) la fijan en su propio cuerpo
+    con monkeypatch.setenv, que se ejecuta despues de esta fixture.
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+
+
 @pytest_asyncio.fixture
 async def test_db(monkeypatch):
     """SQLite async en memoria; sustituye AsyncSessionLocal de la app."""

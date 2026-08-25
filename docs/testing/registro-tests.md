@@ -12,11 +12,13 @@ Documento de registro de las pruebas realizadas sobre el prototipo Smart-Claims 
 
 ```
 Fecha:      2026-08-25
-Commit:     fd38de3 (rama main)
+Commit:     47d3f1d + fixture _no_real_api_key (rama main)
 Entorno:    Windows 11 · Python 3.11.5 · pytest 9.0.3 · pytest-asyncio 1.3.0
-Comando:    py -3.11 -m pytest tests/ -v          (desde backend/, con ANTHROPIC_API_KEY vacía)
-Resultado:  ======================= 100 passed in 365.22s (0:06:05) =======================
+Comando:    py -3.11 -m pytest tests/ -q --durations=6      (desde backend/)
+Resultado:  100 passed in 40.90s
 ```
+
+Una ejecución previa el mismo día (commit `fd38de3`, `ANTHROPIC_API_KEY=""` en el entorno) dio también 100/100 pero en 365 s: la máquina estaba ejecutando en paralelo otra sesión de capturas de pantalla con Playwright, así que ese tiempo no es representativo.
 
 ---
 
@@ -31,7 +33,7 @@ Los tests viven en [`backend/tests/`](../../backend/tests/) y se configuran en [
 - **UI probada en headless.** La app Streamlit se ejecuta con `streamlit.testing.v1.AppTest`, sin navegador.
 - **RAG real en test.** Los tests de RAG usan el ChromaDB embebido con las pólizas sintéticas del repositorio; son los más lentos de la suite por la carga del modelo de embeddings.
 
-> **Nota operativa.** Si existe un fichero `.env` con `ANTHROPIC_API_KEY` en la raíz del repositorio, `load_dotenv()` la carga y los tests pasan a llamar a la API real (siguen pasando, pero tardan mucho más y consumen crédito). Para la ejecución de referencia se lanzó la suite con la variable definida y vacía (`ANTHROPIC_API_KEY=""`), que tiene prioridad sobre el `.env`.
+> **Nota operativa.** El `.env` de la raíz del repositorio contiene una `ANTHROPIC_API_KEY` real para la demo local, y `backend/app/main.py` y `streamlit_app.py` la cargan con `load_dotenv()`. Hasta el 2026-08-25 eso hacía que buena parte de la suite llamara a la API real: `test_api.py` importa `app.main`, cuyo `load_dotenv` reinyectaba la clave *después* de los `os.environ.pop()` que cada módulo de test hacía al importarse, y todos los tests posteriores en orden de recolección corrían con la clave puesta. (Los scripts `evaluate_inprocess.py` y `uat_t2_random_amounts.py` no se veían afectados: importan solo el orquestador, no `app.main`.) Desde entonces, la fixture `autouse` `_no_real_api_key` de `conftest.py` fija `ANTHROPIC_API_KEY=""` antes de cada test: `load_dotenv` no sobrescribe una variable ya definida y `reasoning.py`/`vision.py` tratan la cadena vacía como ausencia de clave. Resultado: **cero llamadas a la API desde los tests**, sin depender de que quien los lance recuerde vaciar la variable.
 
 ### 1.2 Resumen por fichero
 
@@ -203,20 +205,16 @@ Cada línea indica el test y la propiedad que verifica.
 
 ### 1.4 Tiempos de ejecución
 
-Los diez tests más lentos de la ejecución de referencia (el resto tarda menos de 12 s cada uno; la mayoría, milisegundos):
+La suite completa tarda **≈ 41 s**. Los seis tests más lentos de la ejecución de referencia (el resto tarda menos de 1 s cada uno):
 
 | Duración | Test | Motivo |
 |---|---|---|
-| 96,6 s | `test_api.py::test_create_claim_returns_decision` | Primer arranque de la app + carga de ChromaDB y modelo de embeddings |
-| 83,8 s | `test_api.py::test_get_claim_after_processing` | Ídem (flujo completo con RAG) |
-| 39,5 s | `test_determinism.py::test_decisions_unchanged_when_llm_returns_adversarial_content` | Flujo completo ×2 (con y sin LLM simulado) |
-| 18,3 s | `test_conciliation_advisor.py::TestSubidaDeTramo::test_stage_1_rechazada_sube_a_75_por_ciento` | Import inicial del módulo |
-| 17,5 s | `test_streamlit_ui.py::test_streamlit_demo_scenario_never_shows_raw_traceback` | AppTest ejecuta el script Streamlit completo |
-| 15,8 s | `test_conciliation_advisor.py::TestOfertaInicial::test_stage_0_recomienda_oferta_inicial_65_por_ciento` | |
-| 15,5 s | `test_conciliation_advisor.py::TestOfertaInicial::test_oferta_inicial_redondea_a_centimos` | |
-| 15,4 s | `test_streamlit_ui.py::test_bandeja_view_shows_fixture_cases_and_processes_pago_automatico` | AppTest + flujo completo |
-| 14,5 s | `test_conciliation_advisor.py::TestSubidaDeTramo::test_stage_2_rechazada_sube_a_90_por_ciento` | |
-| 12,1 s | `test_conciliation_advisor.py::TestSubidaDeTramo::test_stage_1_sin_rechazo_espera_respuesta_no_sube_tramo` | |
+| 10,4 s | `test_streamlit_ui.py::test_bandeja_view_shows_fixture_cases_and_processes_pago_automatico` | AppTest ejecuta el script Streamlit completo + flujo con RAG |
+| 10,2 s | `test_streamlit_ui.py::test_caso_libre_view_lets_broken_amount_trigger_blindaje_a1` | AppTest ejecuta el script Streamlit completo |
+| 7,0 s | `test_orchestration.py::test_flow_completes_with_decision_when_llm_times_out_for_real` | Simula un `APITimeoutError` real del SDK con reintentos |
+| 4,6 s | `test_rag.py::test_retrieve_policy_matches_each_type` | Primera carga de ChromaDB y del modelo de embeddings |
+| 2,1 s | `test_determinism.py::test_decisions_unchanged_when_llm_returns_adversarial_content` | Flujo completo ×2 (con y sin LLM simulado) |
+| 1,2 s | `test_streamlit_ui.py::test_streamlit_demo_scenario_never_shows_raw_traceback` | AppTest |
 
 ### 1.5 Evolución de la suite
 
@@ -269,17 +267,18 @@ Los guiones están en [`uat_scripts.md`](uat_scripts.md) (regenerados el 2026-08
 
 ```bash
 cd backend
-# Sin clave API: modo determinista, ~6 min (la mayor parte es la carga de ChromaDB/embeddings)
-ANTHROPIC_API_KEY="" py -3.11 -m pytest tests/ -v            # Windows (launcher py)
-ANTHROPIC_API_KEY="" python -m pytest tests/ -v              # Linux/macOS
+# Suite completa, ~40 s. Nunca llama a la API real (fixture _no_real_api_key en conftest.py)
+py -3.11 -m pytest tests/ -v            # Windows (launcher py)
+python -m pytest tests/ -v              # Linux/macOS
 
-# Solo la parte rápida (sin UI Streamlit ni RAG)
-ANTHROPIC_API_KEY="" python -m pytest tests/ -v --ignore=tests/test_streamlit_ui.py --ignore=tests/test_rag.py
+# Solo la parte más rápida (sin UI Streamlit)
+python -m pytest tests/ -v --ignore=tests/test_streamlit_ui.py
 
 # Con Docker (backend levantado)
 docker exec -it sca-backend pytest tests/ -v
 
-# Evaluación sobre el dataset sintético y UAT T2
+# Evaluación sobre el dataset sintético y UAT T2 (ambos scripts vacían la clave por sí
+# mismos antes de importar el orquestador: no consumen crédito)
 py scripts/evaluate_inprocess.py
 py scripts/uat_t2_random_amounts.py --n 200 --seed 7
 ```
