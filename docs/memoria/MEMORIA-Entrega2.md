@@ -333,9 +333,9 @@ El sistema admite **dos modos de despliegue** complementarios.
 | Acceso a datos | SQLAlchemy 2.0 async (driver aiomysql); SQLite en memoria para tests |
 | Frontend / demo | Streamlit |
 | Empaquetado / despliegue | Docker Compose (5 servicios) + Streamlit Community Cloud |
-| Calidad | 47 tests automatizados (pytest) sobre SQLite en memoria, sin dependencia de MariaDB |
+| Calidad | 100 tests automatizados (pytest) sobre SQLite en memoria, sin dependencia de MariaDB |
 
-En cuanto a la **calidad**, el proyecto cuenta con **47 pruebas automatizadas** ejecutadas con pytest sobre una base de datos SQLite en memoria, que cubren los agentes individuales, el flujo de orquestación completo, los detectores de fraude (incluida la coherencia documental), el RAG, la capa de repositorio, el helper de razonamiento y los endpoints de la API REST. Al no depender de MariaDB, la suite es reproducible en cualquier entorno.
+En cuanto a la **calidad**, el proyecto cuenta con **100 pruebas automatizadas** ejecutadas con pytest sobre una base de datos SQLite en memoria, que cubren los agentes individuales, el flujo de orquestación completo, los detectores de fraude (incluida la coherencia documental), el RAG, la capa de repositorio, el helper de razonamiento, los endpoints de la API REST, el blindaje de entrada, el asistente de conciliación (Agente F) y la interfaz Streamlit. Al no depender de MariaDB, la suite es reproducible en cualquier entorno. El registro completo de pruebas y resultados está en `docs/testing/registro-tests.md`.
 
 **Nota sobre localización.** Los identificadores de tipo de siniestro (`danys_propis`, `responsabilitat`, `robatori`, `danys_mecanics`) y la moneda de referencia (euros) se heredan del andamiaje inicial del prototipo. En una implantación real para Seguros Pepín (República Dominicana) se localizarían a castellano dominicano y a pesos dominicanos (DOP / RD$); las etiquetas visibles para el usuario ya se presentan en castellano. Esta adaptación afectaría únicamente a los valores de las enumeraciones internas y a la capa de presentación, sin alterar la lógica de los agentes.
 
@@ -1810,9 +1810,12 @@ evaluación reproducible.
 
 ## 4.8 Validación complementaria
 
-- **Suite de tests automatizados:** **47 tests** (pytest, SQLite en memoria) que cubren
-  los agentes, la orquestación end-to-end, las herramientas, el motor antifraude, el RAG
-  y la coherencia documental. Se ejecutan sin MariaDB ni Docker.
+- **Suite de tests automatizados:** **100 tests** (pytest, SQLite en memoria) que cubren
+  los agentes, la orquestación end-to-end, las herramientas, el motor antifraude, el RAG,
+  la coherencia documental, el blindaje de entrada (A1–A4), el determinismo del núcleo de
+  decisión frente al LLM, el asistente de conciliación (Agente F) y la interfaz Streamlit.
+  Se ejecutan sin MariaDB ni Docker; última ejecución 100/100 en verde (2026-08-25). El
+  registro detallado está en `docs/testing/registro-tests.md`.
 - **Extracción multimodal real (Agente C):** La extracción multimodal (Agente C) se evaluó con **6 documentos sintéticos** (facturas, acta policial e informe de taller) con *ground truth* conocido. Claude Vision (`claude-sonnet-4-6`) acertó **el 100 % de los campos** evaluados (17/17): tipo de documento 6/6, importe 5/5, fecha 6/6. Aun siendo una muestra pequeña sobre documentos sintéticos, confirma la fiabilidad de la extracción en condiciones controladas; una validación productiva requeriría un corpus mayor de documentos reales etiquetados.
 - **Demostración CLI/Streamlit:** ejecución de los cinco caminos del flujo con el Chain of
   Thought visible.

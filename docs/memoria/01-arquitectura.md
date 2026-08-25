@@ -262,9 +262,9 @@ El sistema admite **dos modos de despliegue** complementarios.
 | Acceso a datos | SQLAlchemy 2.0 async (driver aiomysql); SQLite en memoria para tests |
 | Frontend / demo | Streamlit |
 | Empaquetado / despliegue | Docker Compose (5 servicios) + Streamlit Community Cloud |
-| Calidad | 47 tests automatizados (pytest) sobre SQLite en memoria, sin dependencia de MariaDB |
+| Calidad | 100 tests automatizados (pytest) sobre SQLite en memoria, sin dependencia de MariaDB |
 
-En cuanto a la **calidad**, el proyecto cuenta con **47 pruebas automatizadas** ejecutadas con pytest sobre una base de datos SQLite en memoria, que cubren los agentes individuales, el flujo de orquestación completo, los detectores de fraude (incluida la coherencia documental), el RAG, la capa de repositorio, el helper de razonamiento y los endpoints de la API REST. Al no depender de MariaDB, la suite es reproducible en cualquier entorno.
+En cuanto a la **calidad**, el proyecto cuenta con **100 pruebas automatizadas** ejecutadas con pytest sobre una base de datos SQLite en memoria, que cubren los agentes individuales, el flujo de orquestación completo, los detectores de fraude (incluida la coherencia documental), el RAG, la capa de repositorio, el helper de razonamiento, los endpoints de la API REST, el blindaje de entrada, el asistente de conciliación (Agente F) y la interfaz Streamlit. Al no depender de MariaDB, la suite es reproducible en cualquier entorno. El registro completo de pruebas y resultados está en `docs/testing/registro-tests.md`.
 
 **Nota sobre localización.** Los identificadores de tipo de siniestro (`danys_propis`, `responsabilitat`, `robatori`, `danys_mecanics`) y la moneda de referencia (euros) se heredan del andamiaje inicial del prototipo. En una implantación real para Seguros Pepín (República Dominicana) se localizarían a castellano dominicano y a pesos dominicanos (DOP / RD$); las etiquetas visibles para el usuario ya se presentan en castellano. Esta adaptación afectaría únicamente a los valores de las enumeraciones internas y a la capa de presentación, sin alterar la lógica de los agentes.
 

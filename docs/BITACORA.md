@@ -322,3 +322,18 @@ y comprueba que el resultado es `RECHAZO` con el motivo legible del blindaje A1 
 pantalla, sin ninguna excepción sin capturar. Suite completa: 100 tests, verde.
 
 Con esto, el blindaje de entrada (A1-A5) queda completo.
+
+## Fase 14 — Registro de pruebas para la memoria (agosto 2026)
+
+Se ejecuta la suite completa el 2026-08-25 sobre el commit `fd38de3` (Python 3.11.5, pytest 9.0.3,
+`ANTHROPIC_API_KEY` vacía): **100 tests, 100 en verde, 6 min 05 s**. Se documenta en
+`docs/testing/registro-tests.md` el inventario completo de pruebas en tres niveles — suite
+automatizada (14 ficheros, tabla test a test), evaluación sobre dataset sintético (32/32,
+UAT T2 200/200, Vision 17/17) y guiones UAT (31 casos, 1 ejecutado) — junto con los tiempos,
+la evolución de la suite (25 → 42 → 47 → 100), cómo reproducirla y sus limitaciones (sin CI de
+pytest, sin medida de cobertura). Se actualiza el recuento de 47 a 100 tests en los capítulos 1 y
+4 de la memoria y se enlaza el registro desde el README.
+
+Hallazgo operativo: si el `.env` de la raíz contiene `ANTHROPIC_API_KEY`, `load_dotenv()` la carga
+también en los tests y la suite pasa a llamar a la API real (pasa igualmente, pero tarda mucho más y
+consume crédito). Para ejecutarla en modo determinista basta definir la variable vacía en el entorno.

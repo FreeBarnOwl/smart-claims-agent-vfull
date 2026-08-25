@@ -153,9 +153,12 @@ evaluación reproducible.
 
 ## 4.8 Validación complementaria
 
-- **Suite de tests automatizados:** **47 tests** (pytest, SQLite en memoria) que cubren
-  los agentes, la orquestación end-to-end, las herramientas, el motor antifraude, el RAG
-  y la coherencia documental. Se ejecutan sin MariaDB ni Docker.
+- **Suite de tests automatizados:** **100 tests** (pytest, SQLite en memoria) que cubren
+  los agentes, la orquestación end-to-end, las herramientas, el motor antifraude, el RAG,
+  la coherencia documental, el blindaje de entrada (A1–A4), el determinismo del núcleo de
+  decisión frente al LLM, el asistente de conciliación (Agente F) y la interfaz Streamlit.
+  Se ejecutan sin MariaDB ni Docker; última ejecución 100/100 en verde (2026-08-25). El
+  registro detallado está en `docs/testing/registro-tests.md`.
 - **Extracción multimodal real (Agente C):** La extracción multimodal (Agente C) se evaluó con **6 documentos sintéticos** (facturas, acta policial e informe de taller) con *ground truth* conocido. Claude Vision (`claude-sonnet-4-6`) acertó **el 100 % de los campos** evaluados (17/17): tipo de documento 6/6, importe 5/5, fecha 6/6. Aun siendo una muestra pequeña sobre documentos sintéticos, confirma la fiabilidad de la extracción en condiciones controladas; una validación productiva requeriría un corpus mayor de documentos reales etiquetados.
 - **Demostración CLI/Streamlit:** ejecución de los cinco caminos del flujo con el Chain of
   Thought visible.
