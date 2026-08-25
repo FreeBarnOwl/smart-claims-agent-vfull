@@ -322,11 +322,24 @@ def _normalize_final_state(final: dict) -> dict:
     if current_status not in (None, "", ClaimStatus.OPEN.value):
         return final
 
-    # Caso 1: caso bloqueado por fraude
-    if final.get("fraud_result", {}).get("is_flagged"):
-        final["status"]             = ClaimStatus.REJECTED.value
-        final["decision"]           = "RECHAZO_FRAUDE"
-        final["termination_reason"] = final.get("termination_reason") or "caso bloqueado por fraude/OFAC"
+    # Caso 1: caso marcado por el cribado de fraude (Agente G)
+    fraud_result = final.get("fraud_result") or {}
+    if fraud_result.get("is_flagged"):
+        if fraud_result.get("verdict") == "BLOCKED":
+            # Coincidencia OFAC confirmada → rechazo automatico
+            final["status"]             = ClaimStatus.REJECTED.value
+            final["decision"]           = "RECHAZO_FRAUDE"
+            final["termination_reason"] = final.get("termination_reason") or "caso bloqueado por fraude/OFAC"
+        else:
+            # HIGH_RISK: score probabilistico → ninguna decision adversa sin
+            # supervision humana (memoria §5.3/§5.4, EU AI Act)
+            final["status"]             = ClaimStatus.PENDING_REVIEW.value
+            final["decision"]           = "REVISION_HUMANA"
+            final["hitl_required"]      = True
+            final["termination_reason"] = (
+                final.get("termination_reason")
+                or "derivado a revision humana por alto riesgo de fraude"
+            )
         return final
 
     # Caso 2: documentacion incompleta

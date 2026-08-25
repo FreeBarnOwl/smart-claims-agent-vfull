@@ -111,7 +111,7 @@ async def fraud_compliance_node(state: dict) -> dict:
     # ── Razonamiento (LLM opcional con fallback determinista) ────────────
     fallback = (
         f"Agente G: veredicto {verdict} (score {risk_score:.2f}). "
-        f"{'MARCADO para revision humana.' if is_flagged else 'Sin indicios relevantes.'} "
+        f"{'BLOQUEADO por coincidencia OFAC confirmada.' if verdict == 'BLOCKED' else 'DERIVADO a revision humana obligatoria.' if verdict == 'HIGH_RISK' else 'Sin indicios relevantes.'} "
         f"Senales activas: {'; '.join(signals)}."
     )
 
@@ -190,9 +190,18 @@ async def fraud_compliance_node(state: dict) -> dict:
         }],
     }
 
-    # Si el cribado bloquea o marca como alto riesgo, el supervisor termina el flujo
-    if is_flagged:
+    # Si el cribado bloquea o marca como alto riesgo, el supervisor termina el flujo.
+    #   BLOCKED   → coincidencia OFAC confirmada: rechazo automatico.
+    #   HIGH_RISK → score probabilistico: NUNCA se rechaza sin supervision
+    #               humana (EU AI Act); se deriva a revision humana obligatoria.
+    if verdict == "BLOCKED":
         update["terminate"]          = True
         update["termination_reason"] = f"caso bloqueado por fraude (veredicto: {verdict})"
+    elif verdict == "HIGH_RISK":
+        update["terminate"]          = True
+        update["hitl_required"]      = True
+        update["termination_reason"] = (
+            f"derivado a revision humana por alto riesgo de fraude (veredicto: {verdict})"
+        )
 
     return update

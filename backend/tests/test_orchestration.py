@@ -236,3 +236,78 @@ async def test_decisions_log_accumulates(test_db):
     assert "agent_c_multimodal_extractor"   in agents_invoked
     assert "agent_d_coverage_checker"       in agents_invoked
     assert "agent_e_claim_resolver"         in agents_invoked
+
+
+# ── Desenlace de los veredictos del Agente G (fraude/cumplimiento) ──────────
+#
+# Hay tests unitarios del veredicto (test_agents.py, test_fraud_tools.py) pero
+# ninguno del desenlace end-to-end. Estos dos fijan el contrato de la memoria
+# (§5.3/§5.4 y EU AI Act): solo la coincidencia OFAC confirmada (BLOCKED)
+# produce un rechazo automatico; un HIGH_RISK basado en un score probabilistico
+# se deriva SIEMPRE a revision humana, nunca se rechaza sin supervision.
+
+@pytest.mark.asyncio
+async def test_flow_blocked_ofac_is_rejected_as_fraud(test_db):
+    """OFAC match confirmado (BLOCKED) → rejected / RECHAZO_FRAUDE, sin
+    invocar cobertura ni resolucion."""
+    random.seed(7)
+    result = await process_claim(
+        claim_id         = "CLM-OFAC",
+        client_id        = "C-OFAC",
+        client_name      = "Viktor Nikolaev Kozlov",   # nombre exacto de la lista SDN
+        claim_type       = "danys_propis",
+        amount_requested = 2500.0,
+        documents        = FULL_DOCS,
+    )
+
+    assert result["fraud_result"]["verdict"] == "BLOCKED"
+    assert result["status"]                  == "rejected"
+    assert result["decision"]                == "RECHAZO_FRAUDE"
+    assert result.get("hitl_required") is not True
+    # G corta el flujo antes de D y E
+    assert result.get("coverage_result") is None
+    assert result.get("resolution") is None
+
+
+@pytest.mark.asyncio
+async def test_flow_high_risk_goes_to_human_review_not_rejection(test_db, monkeypatch):
+    """HIGH_RISK (score >= 0.55 sin OFAC) → pending_review / REVISION_HUMANA
+    con hitl_required=True. Nunca un rechazo automatico."""
+    import datetime as _dt
+    import app.agents.fraud_compliance as fraud_module
+
+    random.seed(7)
+    # Importe > max legitimo de danys_propis (9000) → +0.40; duplicado reciente
+    # (< 30 dias) del mismo cliente y tipo → +0.35. Score 0.75 ≥ 0.55 → HIGH_RISK.
+    monkeypatch.setattr(fraud_module, "_MOCK_CLAIM_HISTORY", [{
+        "id":         "CLM-H-REC",
+        "client_id":  "C-HR",
+        "claim_type": "danys_propis",
+        "created_at": _dt.datetime.utcnow() - _dt.timedelta(days=5),
+    }])
+
+    result = await process_claim(
+        claim_id         = "CLM-HIGHRISK",
+        client_id        = "C-HR",
+        client_name      = "Cliente Normal",           # sin coincidencia OFAC
+        claim_type       = "danys_propis",
+        amount_requested = 50000.0,
+        documents        = FULL_DOCS,
+    )
+
+    assert result["fraud_result"]["verdict"]    == "HIGH_RISK"
+    assert result["fraud_result"]["ofac_match"] is False
+    assert result["status"]                     == "pending_review"
+    assert result["decision"]                   == "REVISION_HUMANA"
+    assert result["hitl_required"]              is True
+    assert result["status"] != "rejected" and result["decision"] != "RECHAZO_FRAUDE"
+    # La razon de terminacion y la traza reflejan la derivacion, no un rechazo
+    assert "revision humana" in result["termination_reason"].lower()
+    assert "bloqueado" not in result["termination_reason"].lower()
+    assert any("revision humana" in t.lower() for t in result["reasoning_trace"])
+    # G sigue cortando el flujo antes de D y E (supervisor_router intacto)
+    assert result.get("coverage_result") is None
+    assert result.get("resolution") is None
+    # El decisions_log de G deja constancia del HITL para la persistencia/auditoria
+    g_entries = [d for d in result["decisions_log"] if d["agent"] == "agent_g_fraud_compliance"]
+    assert g_entries and g_entries[-1]["hitl_required"] is True
