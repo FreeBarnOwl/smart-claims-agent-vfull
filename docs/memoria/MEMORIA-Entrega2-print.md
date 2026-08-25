@@ -354,8 +354,7 @@ Wang, L., Ma, C., Feng, X., Zhang, Z., Yang, H., Zhang, J., … Wen, J. R. (2024
 Yao, S., Zhao, J., Yu, D., Du, N., Shafran, I., Narasimhan, K., & Cao, Y. (2022). *ReAct: Synergizing reasoning and acting in language models*. arXiv:2210.03629. https://arxiv.org/abs/2210.03629
 
 
-
-ewpage
+<div style="page-break-after: always;"></div>
 
 ---
 
@@ -816,8 +815,7 @@ Lewis, P., Perez, E., Piktus, A., Petroni, F., Karpukhin, V., Goyal, N., Oguz, B
 Yao, S., Zhao, J., Yu, D., Du, N., Shafran, I., Narasimhan, K., & Cao, Y. (2023). *ReAct: Synergizing reasoning and acting in language models*. International Conference on Learning Representations (ICLR 2023). https://arxiv.org/abs/2210.03629
 
 
-
-ewpage
+<div style="page-break-after: always;"></div>
 
 ---
 
@@ -1816,8 +1814,7 @@ Snowflake Inc. (2025). *Streamlit documentation*. https://docs.streamlit.io
 Vrána, J. (2024). *Adminer — Database management in a single PHP file*. https://www.adminer.org
 
 
-
-ewpage
+<div style="page-break-after: always;"></div>
 
 ---
 
