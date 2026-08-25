@@ -4,7 +4,7 @@ Documento de registro de las pruebas realizadas sobre el prototipo Smart-Claims 
 
 | Nivel | Qué es | Volumen | Resultado |
 |---|---|---|---|
-| **1. Suite automatizada (pytest)** | Tests unitarios, de integración y end-to-end que se ejecutan sin red, sin Docker y sin MariaDB | **100 tests** en 14 ficheros | **100/100 en verde** (ejecución del 2026-08-25) |
+| **1. Suite automatizada (pytest)** | Tests unitarios, de integración y end-to-end que se ejecutan sin red, sin Docker y sin MariaDB | **102 tests** en 14 ficheros | **102/102 en verde** (ejecución del 2026-08-25) |
 | **2. Evaluación sobre dataset sintético** | Scripts que procesan lotes de expedientes y comparan la decisión con la esperada | 32 casos + 200 importes aleatorios + 6 documentos Vision | 32/32 · 200/200 · 17/17 campos |
 | **3. Pruebas de aceptación de usuario (UAT)** | Guiones manuales para que una persona ajena al desarrollo ataque el sistema desde la interfaz | 31 casos de prueba | 1 ejecutado y verificado (T2-01); resto pendiente de la sesión UAT |
 
@@ -12,13 +12,13 @@ Documento de registro de las pruebas realizadas sobre el prototipo Smart-Claims 
 
 ```
 Fecha:      2026-08-25
-Commit:     a2d0340 (rama main)
+Commit:     60629b4 (rama main)
 Entorno:    Windows 11 · Python 3.11.5 · pytest 9.0.3 · pytest-asyncio 1.3.0
-Comando:    py -3.11 -m pytest tests/ -q --durations=6      (desde backend/)
-Resultado:  100 passed in 40.90s
+Comando:    ANTHROPIC_API_KEY="" py -3.11 -m pytest tests/ -v      (desde backend/)
+Resultado:  102 passed in 38.22s
 ```
 
-Una ejecución previa el mismo día (commit `fd38de3`, `ANTHROPIC_API_KEY=""` en el entorno) dio también 100/100 pero en 365 s: la máquina estaba ejecutando en paralelo otra sesión de capturas de pantalla con Playwright, así que ese tiempo no es representativo.
+Ejecuciones previas el mismo día: commit `a2d0340` (100 tests, `100 passed in 40.90s`, antes de añadir los dos tests del desenlace del Agente G) y commit `fd38de3` (`ANTHROPIC_API_KEY=""` en el entorno), que dio también 100/100 pero en 365 s: la máquina estaba ejecutando en paralelo otra sesión de capturas de pantalla con Playwright, así que ese tiempo no es representativo.
 
 ---
 
@@ -47,13 +47,13 @@ Los tests viven en [`backend/tests/`](../../backend/tests/) y se configuran en [
 | `test_fraud_coherence.py` | 4.º detector del Agente G (coherencia documental) en el flujo | 2 | ✅ 2/2 |
 | `test_fraud_tools.py` | Motor antifraude: OFAC, Z-score, duplicados, coherencia, score | 15 | ✅ 15/15 |
 | `test_input_validation.py` | Blindaje A1 — `validate_claim_input()` | 13 | ✅ 13/13 |
-| `test_orchestration.py` | Flujo completo A→B→C→G→D→E y blindajes A1/A2/A4 | 10 | ✅ 10/10 |
+| `test_orchestration.py` | Flujo completo A→B→C→G→D→E, desenlace de los veredictos de G y blindajes A1/A2/A4 | 12 | ✅ 12/12 |
 | `test_rag.py` | RAG de pólizas (ChromaDB) y fallback al catálogo | 3 | ✅ 3/3 |
 | `test_reasoning.py` | Helper `reason()`: fallback, timeout | 4 | ✅ 4/4 |
 | `test_repository.py` | Capa de persistencia | 5 | ✅ 5/5 |
 | `test_streamlit_ui.py` | UI Streamlit (AppTest): demo, Bandeja, Caso libre, Conciliación | 4 | ✅ 4/4 |
 | `test_vision.py` | Extracción multimodal (`vision.py`): fallback, timeout | 3 | ✅ 3/3 |
-| **Total** | | **100** | **✅ 100/100** |
+| **Total** | | **102** | **✅ 102/102** |
 
 ### 1.3 Detalle de los casos de prueba
 
@@ -144,7 +144,7 @@ Cada línea indica el test y la propiedad que verifica.
 | `test_normalizes_client_name_whitespace` | Espacios múltiples normalizados |
 | `test_deduplicates_documents` | Documentos repetidos deduplicados |
 
-#### `test_orchestration.py` — flujo end-to-end (10)
+#### `test_orchestration.py` — flujo end-to-end (12)
 
 | Test | Verifica |
 |---|---|
@@ -158,6 +158,8 @@ Cada línea indica el test y la propiedad que verifica.
 | `test_duplicate_documents_are_deduplicated_before_validation` | La deduplicación ocurre antes del Agente B |
 | `test_flow_completes_with_decision_when_llm_times_out_for_real` | Blindaje A4: con `anthropic.APITimeoutError` real el flujo termina con decisión |
 | `test_decisions_log_accumulates` | El log de decisiones acumula una entrada por agente |
+| `test_flow_blocked_ofac_is_rejected_as_fraud` | Veredicto `BLOCKED` del Agente G (coincidencia OFAC) → `rejected` / `RECHAZO_FRAUDE`; D y E no se ejecutan |
+| `test_flow_high_risk_goes_to_human_review_not_rejection` | Veredicto `HIGH_RISK` (score 0,75: importe anómalo + duplicado reciente, sin OFAC) → `pending_review` / `REVISION_HUMANA` con `hitl_required = True`; nunca rechazo automático; la razón de terminación y la traza hablan de revisión humana; D y E no se ejecutan |
 
 #### `test_rag.py` — RAG de pólizas (3)
 
@@ -205,7 +207,7 @@ Cada línea indica el test y la propiedad que verifica.
 
 ### 1.4 Tiempos de ejecución
 
-La suite completa tarda **≈ 41 s**. Los seis tests más lentos de la ejecución de referencia (el resto tarda menos de 1 s cada uno):
+La suite completa tarda **≈ 40 s**. Los seis tests más lentos de la ejecución de referencia (el resto tarda menos de 1 s cada uno):
 
 | Duración | Test | Motivo |
 |---|---|---|
@@ -225,6 +227,7 @@ La suite completa tarda **≈ 41 s**. Los seis tests más lentos de la ejecució
 | RAG real de pólizas | 47 (+3 `test_rag.py`) | BITÁCORA, fase 9 |
 | Blindajes A1–A4, determinismo, API, UI Streamlit, Bandeja | 78 | commits `1c396ee`, `28f7962`, `67f3c6a`, `db518d2`, `4180ae1`, `6b61149`, `a5814f7` |
 | Agente F (asistente de conciliación) | 100 (+22 `test_conciliation_advisor.py`) | BITÁCORA, fase 12 |
+| Desenlace de los veredictos del Agente G: `HIGH_RISK` → revisión humana, solo `BLOCKED` rechaza | 102 (+2 `test_orchestration.py`) | commit `60629b4` |
 
 ---
 

@@ -565,7 +565,7 @@ docker exec -it sca-backend pytest tests/ --cov=app --cov-report=term-missing
 docker exec -it sca-backend pytest tests/test_e2e.py -v -s
 ```
 
-Registro completo de pruebas (suite de 100 tests, evaluación sobre dataset sintético y guiones UAT, con resultados): [docs/testing/registro-tests.md](docs/testing/registro-tests.md).
+Registro completo de pruebas (suite de 102 tests, evaluación sobre dataset sintético y guiones UAT, con resultados): [docs/testing/registro-tests.md](docs/testing/registro-tests.md).
 
 | Escenario | Resultado esperado |
 |---|---|
