@@ -20,6 +20,19 @@ logger = logging.getLogger(__name__)
 
 COLLECTION_NAME = "pepin_policies"
 
+# Etiquetas en castellano de los claim_type para el texto indexado en ChromaDB.
+# El claim_type interno (danys_propis, responsabilitat, robatori, danys_mecanics)
+# no se renombra (es la clave de filtro RAG y coincide con data/policies/*.md);
+# esta tabla es solo para el texto indexado, que se reexpone tal cual como
+# "retrieved_snippet" en la UI (Agente D).
+_CLAIM_TYPE_LABEL_ES = {
+    "danys_propis":    "daños propios",
+    "responsabilitat": "responsabilidad civil",
+    "robatori":        "robo",
+    "danys_mecanics":  "daños mecánicos",
+    "default":         "sin clasificar",
+}
+
 # Rutas candidatas a data/policies (local, Docker, etc.)
 _CANDIDATES = [
     Path(__file__).resolve().parents[3] / "data" / "policies",  # repo/backend/app/rag -> repo/data
@@ -96,7 +109,8 @@ def _build_collection():
             # Texto indexado CONCISO y anclado en el claim_type (mejor recuperación
             # con el embedding ligero por defecto). El cuerpo completo queda en el .md.
             documents=[
-                f"Siniestro tipo {p['claim_type']}. {p['claim_type']}. "
+                f"Siniestro tipo {_CLAIM_TYPE_LABEL_ES.get(p['claim_type'], p['claim_type'])}. "
+                f"{_CLAIM_TYPE_LABEL_ES.get(p['claim_type'], p['claim_type'])}. "
                 f"{p['summary'] or p['text'][:160]}"
                 for p in policies
             ],

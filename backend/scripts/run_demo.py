@@ -22,6 +22,7 @@ from dotenv import find_dotenv, load_dotenv         # noqa: E402
 load_dotenv(find_dotenv())
 
 from app.agents.orchestrator import process_claim  # noqa: E402
+from app.agents.reasoning import claim_type_label  # noqa: E402
 from app.db.session import engine                  # noqa: E402
 
 
@@ -98,7 +99,7 @@ async def main() -> None:
         print("-" * 78)
         print(f"  Expediente: {case['claim_id']}")
         print(f"  Escenario:  {scenario}")
-        print(f"  Tipo:       {case['claim_type']}  |  Importe: {case['amount_requested']} EUR")
+        print(f"  Tipo:       {claim_type_label(case['claim_type'])}  |  Importe: {case['amount_requested']} EUR")
         print("-" * 78)
 
         result = await process_claim(**case)

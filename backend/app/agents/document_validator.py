@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 
-from app.agents.reasoning import reason
+from app.agents.reasoning import claim_type_label, reason
 from app.tools.claim_tools import (
     REQUIRED_DOCS_BY_TYPE,
     request_more_info,
@@ -26,6 +26,24 @@ from app.tools.claim_tools import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Etiquetas en castellano para los identificadores internos de documento.
+# Los identificadores (foto_danys, denuncia_companyia, ...) son claves de
+# dato usadas por claim_tools/multimodal_extractor y no se renombran; esta
+# tabla es solo para el texto que se muestra al usuario.
+DOC_LABEL_ES = {
+    "foto_danys":             "foto de daños",
+    "factura":                "factura",
+    "denuncia_companyia":     "denuncia a la compañía",
+    "acta_policial":          "acta policial",
+    "dades_tercer":           "datos del tercero",
+    "llista_objectes_robats": "listado de objetos robados",
+    "informe_taller":         "informe del taller",
+}
+
+
+def _doc_labels(doc_types: list[str]) -> list[str]:
+    return [DOC_LABEL_ES.get(d, d) for d in doc_types]
 
 
 async def document_validator_node(state: dict) -> dict:
@@ -61,12 +79,13 @@ async def document_validator_node(state: dict) -> dict:
         })
 
     # ── Razonamiento (LLM opcional con fallback determinista) ────────────
+    claim_type_es = claim_type_label(claim_type)
     fallback = (
         f"Agente B: documentacion "
         f"{'completa y conforme' if validation['is_valid'] else 'incompleta'}. "
-        f"Documentos requeridos: {', '.join(validation['required_docs'])}. "
+        f"Documentos requeridos: {', '.join(_doc_labels(validation['required_docs']))}. "
         f"Documentos faltantes: "
-        f"{', '.join(validation['missing_docs']) if validation['missing_docs'] else 'ninguno'}."
+        f"{', '.join(_doc_labels(validation['missing_docs'])) if validation['missing_docs'] else 'ninguno'}."
     )
 
     reasoning = reason(
@@ -79,10 +98,10 @@ async def document_validator_node(state: dict) -> dict:
         prompt=(
             f"Resultado de la validacion documental:\n"
             f"- Expediente: {claim_id}\n"
-            f"- Tipo de siniestro: {claim_type}\n"
-            f"- Documentos requeridos: {validation['required_docs']}\n"
-            f"- Documentos aportados: {validation['provided_docs']}\n"
-            f"- Documentos faltantes: {validation['missing_docs']}\n"
+            f"- Tipo de siniestro: {claim_type_es}\n"
+            f"- Documentos requeridos: {_doc_labels(validation['required_docs'])}\n"
+            f"- Documentos aportados: {_doc_labels(validation['provided_docs'])}\n"
+            f"- Documentos faltantes: {_doc_labels(validation['missing_docs'])}\n"
             f"- Contrato vigente: {validation['contract_active']}\n\n"
             f"Justifica el resultado y, si la documentacion es incompleta, "
             f"indica que debe aportar el cliente."

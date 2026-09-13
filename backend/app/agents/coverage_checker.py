@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import os
 
-from app.agents.reasoning import reason
+from app.agents.reasoning import reason, claim_type_label
 from app.tools.claim_tools import check_policy
 
 logger = logging.getLogger(__name__)
@@ -91,8 +91,9 @@ async def coverage_checker_node(state: dict) -> dict:
     # ── Razonamiento (LLM opcional con fallback determinista) ────────────
     via = ("recuperada por RAG vectorial sobre las pólizas (ChromaDB)"
            if coverage.get("source") == "rag" else "según el catálogo de pólizas")
+    claim_type_es = claim_type_label(claim_type)
     fallback = (
-        f"Agente D: cobertura {via}. Siniestro '{claim_type}' "
+        f"Agente D: cobertura {via}. Siniestro '{claim_type_es}' "
         f"{'cubierto' if coverage['covered'] else 'no cubierto'} segun "
         f"seccion {coverage['policy_section']}. "
         f"Importe neto pagable: {coverage['net_payable']:.2f} EUR "
@@ -109,7 +110,7 @@ async def coverage_checker_node(state: dict) -> dict:
         prompt=(
             f"Resultado de la verificacion de cobertura:\n"
             f"- Expediente: {claim_id}\n"
-            f"- Tipo de siniestro: {claim_type}\n"
+            f"- Tipo de siniestro: {claim_type_es}\n"
             f"- Importe reclamado: {amount} EUR\n"
             f"- Cubierto: {coverage['covered']}\n"
             f"- Limite maximo: {coverage['max_coverage']} EUR\n"

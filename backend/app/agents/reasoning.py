@@ -20,6 +20,26 @@ logger = logging.getLogger(__name__)
 
 MODEL = "claude-sonnet-4-6"
 
+# Etiquetas en castellano para los identificadores internos de claim_type.
+# Los identificadores (danys_propis, responsabilitat, robatori, danys_mecanics)
+# son claves de dato que no se renombran (coinciden con data/policies/*.md y
+# los metadatos del RAG); esta tabla es solo para el texto que se muestra al
+# usuario (Chain of Thought en pantalla, CLI, UI).
+CLAIM_TYPE_LABEL_ES = {
+    "danys_propis":    "daños propios",
+    "responsabilitat": "responsabilidad civil",
+    "robatori":        "robo",
+    "danys_mecanics":  "daños mecánicos",
+    "default":         "sin clasificar",
+}
+
+
+def claim_type_label(claim_type: str | None) -> str:
+    """Etiqueta en castellano de un claim_type para texto mostrado al usuario."""
+    if not claim_type:
+        return CLAIM_TYPE_LABEL_ES["default"]
+    return CLAIM_TYPE_LABEL_ES.get(claim_type, claim_type)
+
 
 def reason(system: str, prompt: str, fallback: str) -> str:
     """

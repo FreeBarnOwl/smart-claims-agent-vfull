@@ -624,12 +624,12 @@ elif view == "libre":
     libre_client_id = b.text_input("ID Cliente", key="libre_client_id",
                                    placeholder="p. ej. CLIENT-LIBRE")
     libre_claim_type = a.text_input("Tipo de siniestro", key="libre_claim_type",
-                                    placeholder="danys_propis, responsabilitat, robatori, "
-                                                "danys_mecanics… o cualquier otro texto")
+                                    placeholder="daños propios, responsabilidad civil, robo, "
+                                                "daños mecánicos… o cualquier otro texto")
     libre_amount = b.text_input("Importe reclamado", key="libre_amount",
                                 placeholder="Cualquier valor, incluso no numérico")
     libre_documents = st.text_input("Documentos aportados (separados por comas)",
-                                    key="libre_documents", placeholder="foto_danys, factura")
+                                    key="libre_documents", placeholder="foto de daños, factura")
     if st.button("Procesar caso libre", key="libre_submit", use_container_width=True):
         if not libre_claim_type and not libre_amount:
             st.warning("Indica al menos el tipo de siniestro y el importe reclamado.")

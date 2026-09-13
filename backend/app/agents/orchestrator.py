@@ -32,7 +32,7 @@ from app.agents.coverage_checker     import coverage_checker_node
 from app.agents.document_validator   import document_validator_node
 from app.agents.fraud_compliance     import fraud_compliance_node
 from app.agents.multimodal_extractor import multimodal_extractor_node
-from app.agents.reasoning            import reason
+from app.agents.reasoning            import reason, claim_type_label
 from app.agents.state                import ClaimState
 from app.db.models                   import ClaimStatus
 from app.db.repository               import log_agent_decision, save_claim
@@ -153,8 +153,10 @@ async def triage_node(state: dict) -> dict:
             }],
         }
 
+    claim_type_es = claim_type_label(state.get("claim_type"))
+
     fallback = (
-        f"Agente A: expediente {claim_id} de tipo '{state.get('claim_type')}' "
+        f"Agente A: expediente {claim_id} de tipo '{claim_type_es}' "
         f"por importe {state.get('amount_requested') or 0} EUR. Se inicia el "
         f"flujo de procesamiento con cribado antifraude como filtro de entrada."
     )
@@ -169,7 +171,7 @@ async def triage_node(state: dict) -> dict:
             f"Reclamacion recibida:\n"
             f"- ID: {state.get('claim_id')}\n"
             f"- Cliente: {state.get('client_id')}\n"
-            f"- Tipo: {state.get('claim_type')}\n"
+            f"- Tipo: {claim_type_es}\n"
             f"- Importe: {state.get('amount_requested')}\n"
             f"- Canal: {state.get('channel')}\n"
             f"- Documentos aportados: {state.get('documents')}\n\n"

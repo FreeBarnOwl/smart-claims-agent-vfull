@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 
-from app.agents.reasoning import reason
+from app.agents.reasoning import reason, claim_type_label
 from app.tools.fraud_tools import (
     check_amount_anomaly,
     check_document_coherence,
@@ -83,6 +83,7 @@ async def fraud_compliance_node(state: dict) -> dict:
 
     risk_score, verdict = compute_risk_score(ofac, amount_ck, duplicate, doc_check)
     is_flagged = verdict in ("HIGH_RISK", "BLOCKED")
+    claim_type_es = claim_type_label(claim_type)
 
     # ── Construir lista de senales activas ───────────────────────────────
     signals: list[str] = []
@@ -95,7 +96,7 @@ async def fraud_compliance_node(state: dict) -> dict:
         reason_amount = "supera el maximo legitimo" if amount_ck.exceeded_max else f"Z-score {amount_ck.z_score}"
         signals.append(
             f"Importe anomalo: {amount:.2f} EUR ({reason_amount}; "
-            f"media historica {claim_type} {amount_ck.mean:.2f} EUR)"
+            f"media historica {claim_type_es} {amount_ck.mean:.2f} EUR)"
         )
     if duplicate.found:
         signals.append(
@@ -127,7 +128,7 @@ async def fraud_compliance_node(state: dict) -> dict:
             f"Resultado del cribado antifraude:\n"
             f"- Expediente: {claim_id}\n"
             f"- Cliente: {client_id} (nombre evaluado: '{client_name}')\n"
-            f"- Tipo de siniestro: {claim_type}\n"
+            f"- Tipo de siniestro: {claim_type_es}\n"
             f"- Importe: {amount} EUR\n"
             f"- Score de riesgo: {risk_score}\n"
             f"- Veredicto: {verdict}\n"

@@ -292,6 +292,10 @@ with tab_history:
             df["created_at"] = pd.to_datetime(df["created_at"], errors="coerce")
             df = df.sort_values("created_at", ascending=False)
 
+        df = df.copy()
+        if "claim_type" in df.columns:
+            df["claim_type"] = df["claim_type"].map(CLAIM_TYPES).fillna(df["claim_type"])
+
         df_display = df[[
             c for c in [
                 "id", "client_id", "claim_type", "status",

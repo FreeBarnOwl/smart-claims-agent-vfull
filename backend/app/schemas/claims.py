@@ -19,7 +19,7 @@ class ClaimCreateRequest(BaseModel):
     client_email:     str       = "cliente@example.com"
     claim_type:       str       = Field(
         default="default",
-        description="danys_propis | responsabilitat | robatori | danys_mecanics | default",
+        description="Tipo de siniestro: daños propios | responsabilidad civil | robo | daños mecánicos | default",
     )
     channel:          str       = "email"
     amount_requested: float     = Field(default=0.0, ge=0)
