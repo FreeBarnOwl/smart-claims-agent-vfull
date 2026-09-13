@@ -24,6 +24,35 @@ logger = logging.getLogger(__name__)
 LOW_CONFIDENCE_THRESHOLD = 0.85
 
 
+def _document_lines(extracted: dict[str, dict]) -> str:
+    """Describe cada documento por lo EXTRAIDO (tipo, confianza, contenido) y
+    nunca por el nombre del fichero adjunto.
+
+    El nombre de un adjunto no es evidencia de nada: al pasarlo al razonamiento
+    se arrastraban conclusiones sobre la forma (como se llama el archivo) en
+    lugar de sobre el fondo (que se ha leido en el). La señal de baja confianza
+    se expresa aqui junto a la confianza de cada documento.
+
+    Compatible con la extraccion real de Claude Vision (clave `summary`) y con
+    la simulada de `extract_multimodal` (subclave `extracted`).
+    """
+    lines: list[str] = []
+    for i, doc in enumerate(extracted.values(), 1):
+        conf   = float(doc.get("confidence") or 0.0)
+        flag   = " (por debajo del umbral)" if conf < LOW_CONFIDENCE_THRESHOLD else ""
+        inner  = doc.get("extracted") if isinstance(doc.get("extracted"), dict) else {}
+        amount = doc.get("amount") if isinstance(doc.get("amount"), (int, float)) else inner.get("amount")
+        importe = f" | importe leido: {amount} EUR" if isinstance(amount, (int, float)) else ""
+        detalle = doc.get("summary") or (
+            ", ".join(f"{k}={v}" for k, v in inner.items()) if inner else "sin detalle"
+        )
+        lines.append(
+            f"- Documento {i}: tipo={doc.get('doc_type') or 'desconocido'} | "
+            f"confianza={conf:.2f}{flag}{importe} | contenido leido: {detalle}"
+        )
+    return "\n".join(lines) or "- (sin documentos)"
+
+
 async def multimodal_extractor_node(state: dict) -> dict:
     """
     Nodo LangGraph del Agente C — Multimodal Extractor.
@@ -103,7 +132,7 @@ async def multimodal_extractor_node(state: dict) -> dict:
         f"Agente C: extraidos {len(extracted)} documentos con confianza media "
         f"{avg_confidence:.2f}. "
         f"{f'Atencion: baja confianza en {low_confidence_docs}.' if low_confidence_docs else 'Todas las extracciones por encima del umbral.'} "
-        f"Importe inferido: {inferred_amount:.2f} EUR."
+        f"Importe leido de los documentos: {inferred_amount:.2f} EUR."
     )
 
     reasoning = reason(
@@ -116,11 +145,13 @@ async def multimodal_extractor_node(state: dict) -> dict:
         prompt=(
             f"Resultado de la extraccion multimodal:\n"
             f"- Expediente: {claim_id}\n"
-            f"- Documentos procesados: {list(extracted.keys())}\n"
+            f"- Documentos procesados: {len(extracted)}\n"
             f"- Confianza media: {avg_confidence}\n"
-            f"- Documentos con baja confianza: {low_confidence_docs}\n"
-            f"- Importe inferido: {inferred_amount} EUR\n\n"
-            f"Resume los hallazgos clave para los siguientes agentes."
+            f"- Importe leido de los documentos: {inferred_amount} EUR\n\n"
+            f"Contenido extraido de cada documento:\n"
+            f"{_document_lines(extracted)}\n\n"
+            f"Resume los hallazgos clave para los siguientes agentes "
+            f"basandote unicamente en el contenido extraido que figura arriba."
         ),
         fallback=fallback,
     )

@@ -40,7 +40,7 @@ def test_reason_falls_back_on_exception(monkeypatch):
 def test_reason_configures_llm_timeout(monkeypatch):
     """El cliente LLM debe configurarse con timeout (blindaje A4): una
     llamada colgada (p. ej. wifi caido durante la defensa) debe caer al
-    fallback en ~20s, no bloquear indefinidamente."""
+    fallback en ~60s, no bloquear indefinidamente."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "fake-key")
     captured = {}
 
@@ -57,7 +57,7 @@ def test_reason_configures_llm_timeout(monkeypatch):
     out = reason(system="sys", prompt="prompt", fallback="FALLBACK_TIMEOUT")
 
     assert out == "FALLBACK_TIMEOUT"
-    assert captured.get("timeout") == 20
+    assert captured.get("timeout") == 60
 
 
 def test_reason_falls_back_on_real_api_timeout_error(monkeypatch):

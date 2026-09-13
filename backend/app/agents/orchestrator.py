@@ -156,7 +156,8 @@ async def triage_node(state: dict) -> dict:
     fallback = (
         f"Agente A: expediente {claim_id} de tipo '{state.get('claim_type')}' "
         f"por importe {state.get('amount_requested') or 0} EUR. Se inicia el "
-        f"flujo de procesamiento con cribado antifraude como filtro de entrada."
+        f"flujo de procesamiento con cribado antifraude como compuerta de "
+        f"cumplimiento previa a la resolucion."
     )
 
     reasoning = reason(
